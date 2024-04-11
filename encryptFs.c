@@ -1,6 +1,6 @@
-// basic example taken from https://github.com/Aveek-Saha/FUSE-Filesystem/tree/master
 #define FUSE_USE_VERSION 30
 
+#include <libgen.h>
 #include <fuse.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -10,767 +10,687 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <linux/stat.h>
+#include <math.h>
 
-// gcc FS.c -o FS `pkg-config fuse --cflags --libs`
-// ./ FS - f Desktop / OS / mountpoint4
+#define BLOCK_SIZE 4096
+#define INODE_SIZE 512
+#define INODES_PER_VOLUME 32768
+#define DATA_BLOCKS_PER_VOLUME 32768
+#define MAX_CHILDREN 128
+#define MAX_PATH_LENGTH 256
+#define MAX_NAME_LENGTH 256
+#define MAX_TYPE_LENGTH 20
+#define MAX_DATABLOCKS 16
+#define ENCRYPTION_KEY_SIZE 32 // AES-256
+#define AES_GCM_NONCE_SIZE 12
+#define AES_GCM_TAG_SIZE 16
 
-#define block_size 1024
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+typedef enum volume_type
+{
+    LOCAL,
+    FTP,
+    GDRIVE,
+} volume_type;
+
+typedef struct volume_info
+{
+    char inodes_path[256]; // path to the volume file that stores inodes
+    char bitmap_path[256]; // Path to the volume file that stores bitmaps
+    char volume_path[256]; // Path to the volume file that stores data blocks
+    int inodes_count;      // Total inodes in this volume
+    int blocks_count;      // Total data blocks in this volume
+    volume_type type;
+} volume_info_t;
 
 typedef struct superblock
 {
-    char datablocks[block_size * 100]; // total number of data blocks
-    char data_bitmap[105];             // array of data block numbers that are available
-    char inode_bitmap[105];            // array of inode numbers that are available
-} superblock;
+    int volume_count;          // Number of volumes in the filesystem
+    int block_size;            // Block size (should be consistent across volumes)
+    int inode_size;            // Inode size (should be consistent)
+    volume_info_t volumes[10]; // Information for up to 10 volumes (expandable)
+} superblock_t;
+
+typedef struct bitmap
+{
+    char inode_bmp[4096];
+    char datablock_bmp[4096];
+} bitmap_t;
 
 typedef struct inode
 {
-    int datablocks[16]; // data block number that the inode points to
-    int number;
-    int blocks; //==number of blocks the particular inode points to
-    // int link;                    //==number of links
-    int size; //==size of file/directory
+    int valid;                  // Indicates if the inode is in use
+    char path[MAX_PATH_LENGTH]; // Full path
+    char name[MAX_NAME_LENGTH]; // Name of the file/directory
+    mode_t permissions;         // Permissions
+    bool is_directory;          // Indicates if the inode represents a directory
+    uid_t user_id;              // Owner's user ID
+    gid_t group_id;             // Owner's group ID
+    time_t a_time;              // Last access time
+    time_t m_time;              // Last modification time
+    time_t c_time;              // Last status change time
+    time_t b_time;              // Creation time
+    off_t size;                 // Size in bytes, for directories this could be the size of the metadata
+
+    // Encryption-related fields
+    unsigned char encryption_key[ENCRYPTION_KEY_SIZE]; // AES encryption key
+    unsigned char nonce[AES_GCM_NONCE_SIZE];           // Nonce (IV) for AES-GCM
+    unsigned char auth_tag[AES_GCM_TAG_SIZE];          // Authentication tag for AES-GCM
+
+    // Data block management
+    int datablocks[MAX_DATABLOCKS]; // Data block indices
+    int num_datablocks;             // Number of data blocks used
+
+    // Directory-specific fields
+    struct inode *parent;                 // Pointer to parent inode (NULL for root)
+    struct inode *children[MAX_CHILDREN]; // Pointers to children inodes
+    int num_children;                     // Number of children
+
+    // File type and links
+    char type[MAX_TYPE_LENGTH]; // File extension/type
+    int num_links;              // Number of links (hard links for files)
+
 } inode;
 
-typedef struct filetype
+void read_bitmap(const char *volume_id, bitmap_t *bmp)
 {
-    int valid;
-    char test[10];
-    char path[100];
-    char name[100]; // name
-    inode *inum;    // inode number
-    struct filetype **children;
-    int num_children;
-    int num_links;
-    struct filetype *parent;
-    char type[20];      //==file extension
-    mode_t permissions; // Permissions
-    uid_t user_id;      // userid
-    gid_t group_id;     // groupid
-    time_t a_time;      // Access time
-    time_t m_time;      // Modified time
-    time_t c_time;      // Status change time
-    time_t b_time;      // Creation time
-    off_t size;         // Size of the node
-
-    int datablocks[16];
-    int number;
-    int blocks;
-
-} filetype;
-
-superblock spblock;
-
-void initialize_superblock()
-{
-
-    memset(spblock.data_bitmap, '0', 100 * sizeof(char));
-    memset(spblock.inode_bitmap, '0', 100 * sizeof(char));
+    char bmp_filename[256];
+    sprintf(bmp_filename, "bmp_%s.file", volume_id);
+    FILE *file = fopen(bmp_filename, "rb");
+    if (file)
+    {
+        fread(bmp, sizeof(bitmap_t), 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // Handle error: bitmap file not found
+    }
 }
 
-filetype *root;
-
-filetype file_array[50];
-
-void tree_to_array(filetype *queue, int *front, int *rear, int *index)
+void write_bitmap(const char *volume_id, const bitmap_t *bmp)
 {
-
-    if (rear < front)
-        return;
-    if (*index > 30)
-        return;
-
-    filetype curr_node = queue[*front];
-    *front += 1;
-    file_array[*index] = curr_node;
-    *index += 1;
-
-    if (*index < 6)
+    char bmp_filename[256];
+    sprintf(bmp_filename, "bmp_%s.file", volume_id);
+    FILE *file = fopen(bmp_filename, "wb"); // Open for writing in binary mode
+    if (file)
     {
+        fwrite(bmp, sizeof(bitmap_t), 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // Handle error: Unable to open bitmap file for writing
+    }
+}
 
-        if (curr_node.valid)
+void read_inode(const char *volume_id, int inode_index, inode *inode_buf)
+{
+    char inode_filename[256];
+    sprintf(inode_filename, "inodes_%s.file", volume_id);
+    FILE *file = fopen(inode_filename, "rb");
+    if (file)
+    {
+        fseek(file, inode_index * sizeof(inode), SEEK_SET);
+        fread(inode_buf, sizeof(inode), 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // Handle error: inode file not found
+    }
+}
+
+void write_inode(const char *volume_id, int inode_index, const inode *inode_buf)
+{
+    char inode_filename[256];
+    sprintf(inode_filename, "inodes_%s.file", volume_id);
+    FILE *file = fopen(inode_filename, "r+b"); // Open for reading and writing in binary mode
+    if (file)
+    {
+        fseek(file, inode_index * sizeof(inode), SEEK_SET);
+        fwrite(inode_buf, sizeof(inode), 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // Handle error: Unable to open inode file for writing
+    }
+}
+
+void read_volume_block(const char *volume_id, int block_index, void *buf)
+{
+    char volume_filename[256];
+    sprintf(volume_filename, "volume_%s.file", volume_id);
+    FILE *file = fopen(volume_filename, "rb");
+    if (file)
+    {
+        fseek(file, block_index * BLOCK_SIZE, SEEK_SET);
+        fread(buf, BLOCK_SIZE, 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // Handle error: volume file not found
+    }
+}
+
+void write_volume_block(const char *volume_id, int block_index, const void *buf)
+{
+    char volume_filename[256];
+    sprintf(volume_filename, "volume_%s.file", volume_id);
+    FILE *file = fopen(volume_filename, "r+b"); // Open for reading and writing; binary mode
+    if (file)
+    {
+        fseek(file, block_index * BLOCK_SIZE, SEEK_SET);
+        fwrite(buf, BLOCK_SIZE, 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // Handle error: volume file not found or unable to write
+    }
+}
+
+void set_bit(unsigned char *bitmap, int index)
+{
+    int byte_index = index / 8;
+    int bit_index = index % 8;
+    bitmap[byte_index] |= (1 << bit_index);
+}
+
+// Utility function to check if the bit at `index` in `bitmap` is 0 (free)
+bool is_bit_free(unsigned char *bitmap, int index)
+{
+    int byte_index = index / 8;
+    int bit_index = index % 8;
+    return !(bitmap[byte_index] & (1 << bit_index));
+}
+
+int allocate_inode_bmp(bitmap_t *bmp, const char *volume_id)
+{
+    for (int i = 0; i < INODES_PER_VOLUME; ++i)
+    {
+        if (is_bit_free(bmp->inode_bmp, i))
         {
-            int n = 0;
-            int i;
-            for (i = 0; i < curr_node.num_children; i++)
-            {
-                if (*rear < *front)
-                    *rear = *front;
-                queue[*rear] = *(curr_node.children[i]);
-                *rear += 1;
-            }
-            while (i < 5)
-            {
-                filetype waste_node;
-                waste_node.valid = 0;
-                queue[*rear] = waste_node;
-                *rear += 1;
-                i++;
-            }
+            // Set the inode as used
+            set_bit(bmp->inode_bmp, i);
+
+            // Write the updated bitmap back to the file
+            write_bitmap(volume_id, bmp);
+
+            return i; // Return the index of the allocated inode
+        }
+    }
+    return -1; // No free inode found
+}
+
+void init_inode(inode *node, const char *path, mode_t mode)
+{
+    // Initialize the inode fields
+    node->valid = 1;
+    strncpy(node->path, path, MAX_PATH_LENGTH - 1);
+    node->path[MAX_PATH_LENGTH - 1] = '\0'; // Ensure null termination
+
+    // Extract file name from path
+    char *pathCopy = strdup(path);       // Duplicate path since basename might modify it
+    char *fileName = basename(pathCopy); // Extracts the base name of the file
+    strncpy(node->name, fileName, MAX_NAME_LENGTH - 1);
+    node->name[MAX_NAME_LENGTH - 1] = '\0'; // Ensure null termination
+    free(pathCopy);                         // Clean up the duplicated path
+
+    // Set permissions
+    node->permissions = mode;
+    node->is_directory = S_ISDIR(mode);
+
+    // Initialize ownership to the current process's owner
+    node->user_id = getuid();
+    node->group_id = getgid();
+
+    // Initialize timestamps
+    time_t now = time(NULL);
+    node->a_time = now; // Last access time
+    node->m_time = now; // Last modification time
+    node->c_time = now; // Last status change time
+    node->b_time = now; // Creation time
+
+    // Initialize size and data blocks
+    node->size = 0;           // Assuming the new inode represents a file that is initially empty
+    node->num_datablocks = 0; // No data blocks allocated yet
+    for (int i = 0; i < MAX_DATABLOCKS; ++i)
+    {
+        node->datablocks[i] = -1; // Initialize all data block indices to -1 indicating they are not used
+    }
+
+    // Assuming it's a file for now, so no children
+    node->num_children = 0;
+    node->parent = NULL; // If creating a root inode or parent is not known at this stage
+
+    // Initialize encryption-related fields if necessary
+
+    // Initialize the file type and link count
+    node->type[0] = '\0'; // Assuming the type needs to be determined elsewhere or is not applicable
+    node->num_links = 1;  // A newly created file typically has one link
+}
+void add_inode_to_directory(int dir_inode_index, int file_inode_index)
+{
+}
+
+// temporary implementation
+int find_inode_index_by_path(const char *volume_id, const char *target_path)
+{
+    char inode_filename[256];
+    sprintf(inode_filename, "inodes_%s.file", volume_id);
+    FILE *file = fopen(inode_filename, "rb");
+
+    if (!file)
+    {
+        // Inode file could not be opened; handle error appropriately.
+        return -1;
+    }
+
+    inode temp_inode;
+    int inode_index = 0;
+
+    // Loop through all inodes in the volume
+    while (fread(&temp_inode, sizeof(inode), 1, file) == 1)
+    {
+        if (temp_inode.valid && strcmp(temp_inode.path, target_path) == 0)
+        {
+            fclose(file);
+            return inode_index; // Found the inode for the given path
+        }
+        inode_index++;
+    }
+
+    fclose(file);
+    return -1; // Target path not found
+}
+
+// Function to initialize a new superblock
+void init_superblock_local(superblock_t *sb)
+{
+    sb->volume_count = 1; // Start with one volume
+    sb->block_size = BLOCK_SIZE;
+    sb->inode_size = INODE_SIZE;
+    // Initialize first volume (Example paths, modify as needed)
+    strcpy(sb->volumes[0].inodes_path, "./inodes_0.file");
+    strcpy(sb->volumes[0].bitmap_path, "./bitmap_0.file");
+    strcpy(sb->volumes[0].volume_path, "./volume_0.file");
+    sb->volumes[0].type = LOCAL;
+    sb->volumes[0].inodes_count = INODES_PER_VOLUME;
+    sb->volumes[0].blocks_count = DATA_BLOCKS_PER_VOLUME;
+}
+
+// Function to initialize a new superblock for remote volumes
+// modify later when doing cloud implementation
+void init_superblock_remote(superblock_t *sb)
+{
+    sb->volume_count = 1; // Start with one volume
+    sb->block_size = BLOCK_SIZE;
+    sb->inode_size = INODE_SIZE;
+    // Initialize first volume (Example paths, modify as needed)
+    strcpy(sb->volumes[0].inodes_path, "https://example.com/inodes_0.file");
+    strcpy(sb->volumes[0].bitmap_path, "https://example.com/bitmap_0.file");
+    strcpy(sb->volumes[0].volume_path, "https://example.com/volume_0.file");
+    sb->volumes[0].type = FTP; // Example: FTP
+    sb->volumes[0].inodes_count = INODES_PER_VOLUME;
+    sb->volumes[0].blocks_count = DATA_BLOCKS_PER_VOLUME;
+}
+
+// Function to load or create superblock
+void load_or_create_superblock(const char *path, superblock_t *sb)
+{
+    FILE *file = fopen(path, "r");
+    if (file)
+    {
+        // Load superblock from file
+        fread(sb, sizeof(superblock_t), 1, file);
+        fclose(file);
+    }
+    else
+    {
+        // No superblock found, initialize a new one
+        // check if superblock path doesnt contain https
+        if (strstr(path, "https") == NULL)
+        {
+            init_superblock_local(sb);
         }
         else
         {
-            int i = 0;
-            while (i < 5)
-            {
-                filetype waste_node;
-                waste_node.valid = 0;
-                queue[*rear] = waste_node;
-                *rear += 1;
-                i++;
-            }
+            // Initialize superblock for remote volumes
+            init_superblock_remote(sb);
+        }
+
+        // Save the new superblock to disk
+        file = fopen(path, "w");
+        fwrite(sb, sizeof(superblock_t), 1, file);
+        fclose(file);
+
+        // Create the volume files (inodes, bitmap, volume) for each volume
+        for (int i = 0; i < sb->volume_count; ++i)
+        {
+            FILE *inodes_file = fopen(sb->volumes[i].inodes_path, "w");
+            fclose(inodes_file);
+            FILE *bitmap_file = fopen(sb->volumes[i].bitmap_path, "w");
+            fclose(bitmap_file);
+            FILE *volume_file = fopen(sb->volumes[i].volume_path, "w");
+            fclose(volume_file);
+        }
+
+        // Create the root directory inode
+        inode root_inode;
+        init_inode(&root_inode, "/", S_IFDIR | 0777); // Root directory
+        write_inode("0", 0, &root_inode);             // Assuming the root inode is in volume 0
+
+        // Create the root directory bitmap
+        bitmap_t root_bmp;
+        memset(root_bmp.inode_bmp, 0, sizeof(root_bmp.inode_bmp));
+        memset(root_bmp.datablock_bmp, 0, sizeof(root_bmp.datablock_bmp));
+        set_bit(root_bmp.inode_bmp, 0); // Mark the root inode as used
+        write_bitmap("0", &root_bmp);   // Assuming the root bitmap is in volume 0
+    }
+}
+
+static int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+    (void)fi; // The fuse_file_info is not used in this simple example
+
+    // Assuming a global or externally accessible superblock `sb` and volume ID `volume_id`
+    extern superblock_t sb;
+    // right now kept zero but read it from the superblock
+    const char *volume_id = "0";
+
+    // Load the current bitmap to find a free inode
+    bitmap_t bmp;
+    read_bitmap(volume_id, &bmp);
+
+    // Allocate a new inode for the file
+    int inode_index = allocate_inode_bmp(&bmp, volume_id);
+    if (inode_index == -1)
+    {
+        return -ENOSPC; // No space left for new inode
+    }
+
+    // Initialize the new inode with file details
+    inode new_inode;
+    init_inode(&new_inode, path, mode);
+
+    // Write the new inode to the inode storage
+    write_inode(volume_id, inode_index, &new_inode);
+
+    // Simplification: Not showing the detailed implementation of updating the parent directory's inode
+    // to include this new file. This would involve finding the parent directory's inode, updating its
+    // children array, and writing the updated inode back to storage.
+
+    return 0; // Success
+}
+
+// fs_read
+static int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
+    (void)fi; // Unused in this simplified example, but can be used for caching inode index etc.
+
+    inode file_inode;
+    const char *volume_id = "0";                                 // Assuming single volume setup for simplicity
+    int inode_index = find_inode_index_by_path(volume_id, path); // Implement this function to find inode by path
+
+    if (inode_index < 0)
+    {
+        return -ENOENT; // No such file
+    }
+
+    // Load the inode information
+    read_inode(volume_id, inode_index, &file_inode);
+
+    if (file_inode.is_directory)
+    {
+        return -EISDIR; // Is a directory, not a file
+    }
+
+    size_t bytes_read = 0;
+    size_t remaining = size;
+    off_t pos = offset;
+
+    // Loop over the inode's data blocks to read data until size is reached or end of file
+    while (remaining > 0 && pos < file_inode.size)
+    {
+        int block_index = pos / BLOCK_SIZE;
+        off_t block_offset = pos % BLOCK_SIZE;
+        size_t bytes_to_read = BLOCK_SIZE - block_offset < remaining ? BLOCK_SIZE - block_offset : remaining;
+
+        if (block_index >= file_inode.num_datablocks)
+        {
+            break; // Trying to read beyond the last data block
+        }
+
+        char block_data[BLOCK_SIZE];
+        read_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
+
+        memcpy(buf + bytes_read, block_data + block_offset, bytes_to_read);
+
+        bytes_read += bytes_to_read;
+        remaining -= bytes_to_read;
+        pos += bytes_to_read;
+    }
+
+    return bytes_read;
+}
+
+// Utility function to find the first free block in the bitmap and allocate it.
+int allocate_data_block(bitmap_t *bmp, const char *volume_id)
+{
+    for (int i = 0; i < DATA_BLOCKS_PER_VOLUME; ++i)
+    {
+        if (is_bit_free(bmp->datablock_bmp, i))
+        {
+            set_bit(bmp->datablock_bmp, i); // Mark the block as used
+            write_bitmap(volume_id, bmp);   // Persist the updated bitmap
+            return i;                       // Return the index of the newly allocated block
         }
     }
-
-    tree_to_array(queue, front, rear, index);
+    return -1; // No free block found
 }
 
-int save_contents()
+static int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-    printf("SAVING\n");
-    filetype *queue = malloc(sizeof(filetype) * 60);
-    int front = 0;
-    int rear = 0;
-    queue[0] = *root;
-    int index = 0;
-    tree_to_array(queue, &front, &rear, &index);
+    (void)fi; // Unused in this example
 
-    for (int i = 0; i < 31; i++)
+    const char *volume_id = "0"; // Assuming single volume setup
+    bitmap_t bmp;
+    read_bitmap(volume_id, &bmp);
+
+    inode file_inode;
+    int inode_index = find_inode_index_by_path(volume_id, path);
+    if (inode_index < 0)
+        return -ENOENT;
+
+    read_inode(volume_id, inode_index, &file_inode);
+    if (file_inode.is_directory)
+        return -EISDIR;
+
+    size_t bytes_written = 0;
+    off_t pos = offset;
+
+    while (bytes_written < size)
     {
-        printf("%d", file_array[i].valid);
+        int block_index = pos / BLOCK_SIZE;
+        off_t block_offset = pos % BLOCK_SIZE;
+        size_t bytes_to_write = MIN(BLOCK_SIZE - block_offset, size - bytes_written);
+
+        if (block_index >= file_inode.num_datablocks)
+        {
+            // Allocate a new block
+            int new_block_index = allocate_data_block(&bmp, volume_id);
+            if (new_block_index == -1)
+                return -ENOSPC; // No space left
+
+            file_inode.datablocks[block_index] = new_block_index;
+            file_inode.num_datablocks += 1;
+        }
+
+        char block_data[BLOCK_SIZE] = {0};
+        // Read existing block data if not writing a full block
+        if (bytes_to_write < BLOCK_SIZE)
+        {
+            read_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
+        }
+
+        // Copy data to block
+        memcpy(block_data + block_offset, buf + bytes_written, bytes_to_write);
+        write_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
+
+        bytes_written += bytes_to_write;
+        pos += bytes_to_write;
     }
 
-    FILE *fd = fopen("file_structure.bin", "wb");
-
-    FILE *fd1 = fopen("super.bin", "wb");
-
-    fwrite(file_array, sizeof(filetype) * 31, 1, fd);
-    fwrite(&spblock, sizeof(superblock), 1, fd1);
-
-    fclose(fd);
-    fclose(fd1);
-
-    printf("\n");
-}
-
-void initialize_root_directory()
-{
-
-    spblock.inode_bitmap[1] = 1; // marking it with 0
-    root = (filetype *)malloc(sizeof(filetype));
-
-    strcpy(root->path, "/");
-    strcpy(root->name, "/");
-
-    root->children = NULL;
-    root->num_children = 0;
-    root->parent = NULL;
-    root->num_links = 2;
-    root->valid = 1;
-    strcpy(root->test, "test");
-    // root -> type = malloc(10);
-    strcpy(root->type, "directory");
-
-    root->c_time = time(NULL);
-    root->a_time = time(NULL);
-    root->m_time = time(NULL);
-    root->b_time = time(NULL);
-
-    root->permissions = S_IFDIR | 0777;
-
-    root->size = 0;
-    root->group_id = getgid();
-    root->user_id = getuid();
-
-    root->number = 2;
-    // root -> size = 0;
-    root->blocks = 0;
-
-    save_contents();
-}
-
-filetype *filetype_from_path(char *path)
-{
-    char curr_folder[100];
-    char *path_name = malloc(strlen(path) + 2);
-
-    strcpy(path_name, path);
-
-    filetype *curr_node = root;
-
-    fflush(stdin);
-
-    if (strcmp(path_name, "/") == 0)
-        return curr_node;
-
-    if (path_name[0] != '/')
+    // Update file size
+    if (offset + size > file_inode.size)
     {
-        printf("INCORRECT PATH\n");
-        exit(1);
+        file_inode.size = offset + size;
+    }
+    write_inode(volume_id, inode_index, &file_inode);
+
+    return bytes_written;
+}
+
+static int fs_getattr(const char *path, struct stat *stbuf)
+{
+    int res = 0;
+    memset(stbuf, 0, sizeof(struct stat));
+    const char *volume_id = "0"; // Assuming single volume setup for simplicity
+
+    if (strcmp(path, "/") == 0)
+    { // Root directory
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2; // Standard for directories
     }
     else
     {
-        path_name++;
-    }
+        inode file_inode;
+        int inode_index = find_inode_index_by_path(volume_id, path);
+        if (inode_index == -1)
+            return -ENOENT; // No such file or directory
 
-    if (path_name[strlen(path_name) - 1] == '/')
-    {
-        path_name[strlen(path_name) - 1] = '\0';
-    }
+        // Load the inode information
+        read_inode(volume_id, inode_index, &file_inode);
 
-    char *index;
-    int flag = 0;
-
-    while (strlen(path_name) != 0)
-    {
-        index = strchr(path_name, '/');
-
-        if (index != NULL)
+        stbuf->st_mode = file_inode.permissions;
+        if (file_inode.is_directory)
         {
-            strncpy(curr_folder, path_name, index - path_name);
-            curr_folder[index - path_name] = '\0';
-
-            flag = 0;
-            for (int i = 0; i < curr_node->num_children; i++)
-            {
-                if (strcmp((curr_node->children)[i]->name, curr_folder) == 0)
-                {
-                    curr_node = (curr_node->children)[i];
-                    flag = 1;
-                    break;
-                }
-            }
-            if (flag == 0)
-                return NULL;
+            stbuf->st_mode |= S_IFDIR;
+            stbuf->st_nlink = 2; // Usually, directories have at least two links
         }
         else
         {
-            strcpy(curr_folder, path_name);
-            flag = 0;
-            for (int i = 0; i < curr_node->num_children; i++)
-            {
-                if (strcmp((curr_node->children)[i]->name, curr_folder) == 0)
-                {
-                    curr_node = (curr_node->children)[i];
-                    return curr_node;
-                }
-            }
-            return NULL;
+            stbuf->st_mode |= S_IFREG;
+            stbuf->st_nlink = file_inode.num_links; // Number of hard links
         }
-        path_name = index + 1;
+        stbuf->st_uid = file_inode.user_id;
+        stbuf->st_gid = file_inode.group_id;
+        stbuf->st_size = file_inode.size;
+        stbuf->st_atime = file_inode.a_time;
+        stbuf->st_mtime = file_inode.m_time;
+        stbuf->st_ctime = file_inode.c_time;
     }
+    return res;
 }
 
-int find_free_inode()
+static int fs_open(const char *path, struct fuse_file_info *fi)
 {
-    for (int i = 2; i < 100; i++)
-    {
-        if (spblock.inode_bitmap[i] == '0')
-        {
-            spblock.inode_bitmap[i] = '1';
-        }
-        return i;
-    }
-}
+    const char *volume_id = "0"; // Assuming single volume setup
+    int inode_index = find_inode_index_by_path(volume_id, path);
+    if (inode_index == -1)
+        return -ENOENT; // No such file
 
-int find_free_db()
-{
-    for (int i = 1; i < 100; i++)
-    {
-        if (spblock.inode_bitmap[i] == '0')
-        {
-            spblock.inode_bitmap[i] = '1';
-        }
-        return i;
-    }
-}
+    inode file_inode;
+    read_inode(volume_id, inode_index, &file_inode);
 
-void add_child(filetype *parent, filetype *child)
-{
-    (parent->num_children)++;
+    // Check if directory (directories cannot be opened)
+    if (file_inode.is_directory)
+        return -EISDIR;
 
-    parent->children = realloc(parent->children, (parent->num_children) * sizeof(filetype *));
-
-    (parent->children)[parent->num_children - 1] = child;
-}
-
-static int mymkdir(const char *path, mode_t mode)
-{
-    printf("MKDIR\n");
-
-    int index = find_free_inode();
-
-    filetype *new_folder = malloc(sizeof(filetype));
-
-    char *pathname = malloc(strlen(path) + 2);
-    strcpy(pathname, path);
-
-    char *rindex = strrchr(pathname, '/');
-
-    // new_folder -> name = malloc(strlen(pathname)+2);
-    strcpy(new_folder->name, rindex + 1);
-    // new_folder -> path = malloc(strlen(pathname)+2);
-    strcpy(new_folder->path, pathname);
-
-    *rindex = '\0';
-
-    if (strlen(pathname) == 0)
-        strcpy(pathname, "/");
-
-    new_folder->children = NULL;
-    new_folder->num_children = 0;
-    new_folder->parent = filetype_from_path(pathname);
-    new_folder->num_links = 2;
-    new_folder->valid = 1;
-    strcpy(new_folder->test, "test");
-
-    if (new_folder->parent == NULL)
-        return -ENOENT;
-
-    // printf(";;;;%p;;;;\n", new_folder);
-
-    add_child(new_folder->parent, new_folder);
-
-    // new_folder -> type = malloc(10);
-    strcpy(new_folder->type, "directory");
-
-    new_folder->c_time = time(NULL);
-    new_folder->a_time = time(NULL);
-    new_folder->m_time = time(NULL);
-    new_folder->b_time = time(NULL);
-
-    new_folder->permissions = S_IFDIR | 0777;
-
-    new_folder->size = 0;
-    new_folder->group_id = getgid();
-    new_folder->user_id = getuid();
-
-    new_folder->number = index;
-    new_folder->blocks = 0;
-
-    save_contents();
+    // In this simplified example, we're not handling file open modes and permissions.
+    // In a real application, you would check `fi->flags` here and compare them with
+    // the file's permissions to decide whether to allow the open operation.
 
     return 0;
 }
 
-int myreaddir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
+static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
-    printf("READDIR\n");
+    (void)offset;
+    (void)fi;
 
-    filler(buffer, ".", NULL, 0);
-    filler(buffer, "..", NULL, 0);
-
-    char *pathname = malloc(strlen(path) + 2);
-    strcpy(pathname, path);
-
-    filetype *dir_node = filetype_from_path(pathname);
-
-    if (dir_node == NULL)
+    const char *volume_id = "0"; // Assuming single volume setup
+    inode dir_inode;
+    int inode_index = find_inode_index_by_path(volume_id, path);
+    if (inode_index < 0)
     {
-        return -ENOENT;
+        return -ENOENT; // Directory not found
     }
-    else
+
+    // Load the directory inode
+    read_inode(volume_id, inode_index, &dir_inode);
+
+    if (!dir_inode.is_directory)
     {
-        dir_node->a_time = time(NULL);
-        for (int i = 0; i < dir_node->num_children; i++)
+        return -ENOTDIR; // Not a directory
+    }
+
+    // Add the current and parent directory entries
+    filler(buf, ".", NULL, 0);
+    filler(buf, "..", NULL, 0);
+
+    // Iterate over the directory's children
+    for (int i = 0; i < dir_inode.num_children; i++)
+    {
+        inode *child_inode = dir_inode.children[i];
+        if (child_inode == NULL)
         {
-            printf(":%s:\n", dir_node->children[i]->name);
-            filler(buffer, dir_node->children[i]->name, NULL, 0);
+            continue; // This should not happen, but just in case
+        }
+        if (child_inode->valid)
+        {
+            filler(buf, child_inode->name, NULL, 0); // Add the child's name to the list
         }
     }
 
-    return 0;
+    return 0; // Success
 }
 
-static int mygetattr(const char *path, struct stat *statit)
-{
-    char *pathname;
-    pathname = (char *)malloc(strlen(path) + 2);
-
-    strcpy(pathname, path);
-
-    printf("GETATTR %s\n", pathname);
-
-    filetype *file_node = filetype_from_path(pathname);
-    if (file_node == NULL)
-        return -ENOENT;
-
-    statit->st_uid = file_node->user_id;  // The owner of the file/directory is the user who mounted the filesystem
-    statit->st_gid = file_node->group_id; // The group of the file/directory is the same as the group of the user who mounted the filesystem
-    statit->st_atime = file_node->a_time; // The last "a"ccess of the file/directory is right now
-    statit->st_mtime = file_node->m_time; // The last "m"odification of the file/directory is right now
-    statit->st_ctime = file_node->c_time;
-    statit->st_mode = file_node->permissions;
-    statit->st_nlink = file_node->num_links + file_node->num_children;
-    statit->st_size = file_node->size;
-    statit->st_blocks = file_node->blocks;
-
-    return 0;
-}
-
-int myrmdir(const char *path)
-{
-
-    char *pathname = malloc(strlen(path) + 2);
-    strcpy(pathname, path);
-
-    char *rindex = strrchr(pathname, '/');
-
-    char *folder_delete = malloc(strlen(rindex + 1) + 2);
-
-    strcpy(folder_delete, rindex + 1);
-
-    *rindex = '\0';
-
-    if (strlen(pathname) == 0)
-        strcpy(pathname, "/");
-
-    filetype *parent = filetype_from_path(pathname);
-
-    if (parent == NULL)
-        return -ENOENT;
-
-    if (parent->num_children == 0)
-        return -ENOENT;
-
-    filetype *curr_child = (parent->children)[0];
-    int index = 0;
-    while (index < (parent->num_children))
-    {
-        if (strcmp(curr_child->name, folder_delete) == 0)
-        {
-            break;
-        }
-        index++;
-        curr_child = (parent->children)[index];
-    }
-
-    if (index < (parent->num_children))
-    {
-        if (((parent->children)[index]->num_children) != 0)
-            return -ENOTEMPTY;
-        for (int i = index + 1; i < (parent->num_children); i++)
-        {
-            (parent->children)[i - 1] = (parent->children)[i];
-        }
-        (parent->num_children) -= 1;
-    }
-
-    else
-    {
-        return -ENOENT;
-    }
-
-    save_contents();
-
-    return 0;
-}
-
-int myrm(const char *path)
-{
-
-    char *pathname = malloc(strlen(path) + 2);
-    strcpy(pathname, path);
-
-    char *rindex = strrchr(pathname, '/');
-
-    char *folder_delete = malloc(strlen(rindex + 1) + 2);
-
-    strcpy(folder_delete, rindex + 1);
-
-    *rindex = '\0';
-
-    if (strlen(pathname) == 0)
-        strcpy(pathname, "/");
-
-    filetype *parent = filetype_from_path(pathname);
-
-    if (parent == NULL)
-        return -ENOENT;
-
-    if (parent->num_children == 0)
-        return -ENOENT;
-
-    filetype *curr_child = (parent->children)[0];
-    int index = 0;
-    while (index < (parent->num_children))
-    {
-        if (strcmp(curr_child->name, folder_delete) == 0)
-        {
-            break;
-        }
-        index++;
-        curr_child = (parent->children)[index];
-    }
-
-    if (index < (parent->num_children))
-    {
-        if (((parent->children)[index]->num_children) != 0)
-            return -ENOTEMPTY;
-        for (int i = index + 1; i < (parent->num_children); i++)
-        {
-            (parent->children)[i - 1] = (parent->children)[i];
-        }
-        (parent->num_children) -= 1;
-    }
-
-    else
-    {
-        return -ENOENT;
-    }
-
-    save_contents();
-
-    return 0;
-}
-
-int mycreate(const char *path, mode_t mode, struct fuse_file_info *fi)
-{
-
-    printf("CREATEFILE\n");
-
-    int index = find_free_inode();
-
-    filetype *new_file = malloc(sizeof(filetype));
-
-    char *pathname = malloc(strlen(path) + 2);
-    strcpy(pathname, path);
-
-    char *rindex = strrchr(pathname, '/');
-
-    strcpy(new_file->name, rindex + 1);
-    strcpy(new_file->path, pathname);
-
-    *rindex = '\0';
-
-    if (strlen(pathname) == 0)
-        strcpy(pathname, "/");
-
-    new_file->children = NULL;
-    new_file->num_children = 0;
-    new_file->parent = filetype_from_path(pathname);
-    new_file->num_links = 0;
-    new_file->valid = 1;
-
-    if (new_file->parent == NULL)
-        return -ENOENT;
-
-    add_child(new_file->parent, new_file);
-
-    // new_file -> type = malloc(10);
-    strcpy(new_file->type, "file");
-
-    new_file->c_time = time(NULL);
-    new_file->a_time = time(NULL);
-    new_file->m_time = time(NULL);
-    new_file->b_time = time(NULL);
-
-    new_file->permissions = S_IFREG | 0777;
-
-    new_file->size = 0;
-    new_file->group_id = getgid();
-    new_file->user_id = getuid();
-
-    new_file->number = index;
-
-    for (int i = 0; i < 16; i++)
-    {
-        (new_file->datablocks)[i] = find_free_db();
-    }
-
-    // new_file -> size = 0;
-    new_file->blocks = 0;
-
-    save_contents();
-
-    return 0;
-}
-
-int myopen(const char *path, struct fuse_file_info *fi)
-{
-    printf("OPEN\n");
-
-    char *pathname = malloc(sizeof(path) + 1);
-    strcpy(pathname, path);
-
-    filetype *file = filetype_from_path(pathname);
-
-    return 0;
-}
-
-int myread(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
-{
-
-    printf("READ\n");
-
-    char *pathname = malloc(sizeof(path) + 1);
-    strcpy(pathname, path);
-
-    filetype *file = filetype_from_path(pathname);
-    if (file == NULL)
-        return -ENOENT;
-
-    else
-    {
-        char *str = malloc(sizeof(char) * 1024 * (file->blocks));
-
-        printf(":%ld:\n", file->size);
-        strcpy(str, "");
-        int i;
-        for (i = 0; i < (file->blocks) - 1; i++)
-        {
-            strncat(str, &spblock.datablocks[block_size * (file->datablocks[i])], 1024);
-            printf("--> %s", str);
-        }
-        strncat(str, &spblock.datablocks[block_size * (file->datablocks[i])], (file->size) % 1024);
-        printf("--> %s", str);
-        // strncpy(str, &spblock.datablocks[block_size*(file -> datablocks[0])], file->size);
-        strcpy(buf, str);
-    }
-    return file->size;
-}
-
-int myaccess(const char *path, int mask)
-{
-    return 0;
-}
-
-int myrename(const char *from, const char *to)
-{
-    printf("RENAME: %s\n", from);
-    printf("RENAME: %s\n", to);
-
-    char *pathname = malloc(strlen(from) + 2);
-    strcpy(pathname, from);
-
-    char *rindex1 = strrchr(pathname, '/');
-
-    filetype *file = filetype_from_path(pathname);
-
-    *rindex1 = '\0';
-
-    char *pathname2 = malloc(strlen(to) + 2);
-    strcpy(pathname2, to);
-
-    char *rindex2 = strrchr(pathname2, '/');
-
-    if (file == NULL)
-        return -ENOENT;
-
-    // file -> name = realloc(file -> name, strlen(rindex2+1)+2);
-    strcpy(file->name, rindex2 + 1);
-    // file -> path = realloc(file -> path, strlen(to)+2);
-    strcpy(file->path, to);
-
-    printf(":%s:\n", file->name);
-    printf(":%s:\n", file->path);
-
-    save_contents();
-
-    return 0;
-}
-
-int mytruncate(const char *path, off_t size)
-{
-    return 0;
-}
-
-int mywrite(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
-{
-
-    printf("WRITING\n");
-
-    char *pathname = malloc(sizeof(path) + 1);
-    strcpy(pathname, path);
-
-    filetype *file = filetype_from_path(pathname);
-    if (file == NULL)
-        return -ENOENT;
-
-    int indexno = (file->blocks) - 1;
-
-    if (file->size == 0)
-    {
-        strcpy(&spblock.datablocks[block_size * ((file->datablocks)[0])], buf);
-        file->size = strlen(buf);
-        (file->blocks)++;
-    }
-    else
-    {
-        int currblk = (file->blocks) - 1;
-        int len1 = 1024 - (file->size % 1024);
-        if (len1 >= strlen(buf))
-        {
-            strcat(&spblock.datablocks[block_size * ((file->datablocks)[currblk])], buf);
-            file->size += strlen(buf);
-            printf("---> %s\n", &spblock.datablocks[block_size * ((file->datablocks)[currblk])]);
-        }
-        else
-        {
-            char *cpystr = malloc(1024 * sizeof(char));
-            strncpy(cpystr, buf, len1 - 1);
-            strcat(&spblock.datablocks[block_size * ((file->datablocks)[currblk])], cpystr);
-            strcpy(cpystr, buf);
-            strcpy(&spblock.datablocks[block_size * ((file->datablocks)[currblk + 1])], (cpystr + len1 - 1));
-            file->size += strlen(buf);
-            printf("---> %s\n", &spblock.datablocks[block_size * ((file->datablocks)[currblk])]);
-            (file->blocks)++;
-        }
-    }
-    save_contents();
-
-    return strlen(buf);
-}
-
-static struct fuse_operations operations =
-    {
-        .mkdir = mymkdir,
-        .getattr = mygetattr,
-        .readdir = myreaddir,
-        .rmdir = myrmdir,
-        .open = myopen,
-        .read = myread,
-        .write = mywrite,
-        .create = mycreate,
-        .rename = myrename,
-        .unlink = myrm,
+static struct fuse_operations fs_operations = {
+    .create = fs_create,
+    .read = fs_read,
+    .write = fs_write,
+    .getattr = fs_getattr,
+    .open = fs_open,
+    .readdir = fs_readdir,
 };
 
 int main(int argc, char *argv[])
 {
-    FILE *fd = fopen("file_structure.bin", "rb");
-    if (fd)
+    superblock_t sb;
+
+    // Check if a superblock path is provided as an argument
+    if (argc < 3)
     {
-        printf("LOADING\n");
-        fread(&file_array, sizeof(filetype) * 31, 1, fd);
-
-        int child_startindex = 1;
-        file_array[0].parent = NULL;
-
-        for (int i = 0; i < 6; i++)
-        {
-            file_array[i].num_children = 0;
-            file_array[i].children = NULL;
-            for (int j = child_startindex; j < child_startindex + 5; j++)
-            {
-                if (file_array[j].valid)
-                {
-                    add_child(&file_array[i], &file_array[j]);
-                }
-            }
-            child_startindex += 5;
-        }
-
-        root = &file_array[0];
-
-        FILE *fd1 = fopen("super.bin", "rb");
-        fread(&spblock, sizeof(superblock), 1, fd1);
-    }
-    else
-    {
-        initialize_superblock();
-        initialize_root_directory();
+        printf("Usage: %s <mountpoint> <superblock_path>\n", argv[0]);
+        return 1;
     }
 
-    return fuse_main(argc, argv, &operations, NULL);
+    // The superblock path is provided as the last argument for simplicity
+    char *superblock_path = argv[argc - 1];
+
+    // Modify the argument list to remove the superblock path
+    argc--;
+
+    // Attempt to load the superblock, or create a new one if it doesn't exist
+    load_or_create_superblock(superblock_path, &sb);
+
+    // Proceed with FUSE main loop
+    return fuse_main(argc, argv, &fs_operations, NULL);
 }
