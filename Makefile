@@ -2,9 +2,9 @@ username := $(shell whoami)
 mountpoint := /home/$(username)/hello
 includepath := -I./include
 srcprefix := ./src/
-files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c
+files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c ${srcprefix}crypto.c
 cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse` -DFUSE_USE_VERSION=30
-ldflags := `pkg-config --libs fuse`
+ldflags := $(shell pkg-config --libs fuse) -lsodium
 opflag := -o myFS
 
 .PHONY: all run drun bgrun compile dcompile checkdir dmkfs mkfs_dcompile mkfs mkfs_compile cleanup
