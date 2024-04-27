@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <fuse.h>
 
+#include "crypto.h"
 #include "fs_operations.h"  
 
 // Define the file system operations here, same as the ones previously in your main file
@@ -61,7 +62,9 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
     (void)fi; // Unused in this simplified example, but can be used for caching inode index etc.
 
     inode file_inode;
-    const char *volume_id = "0";                                 // Assuming single volume setup for simplicity
+    const char *volume_id = "0";  // Assuming single volume setup for simplicity
+    unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
+    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];                               
     int inode_index = find_inode_index_by_path(volume_id, path); // Implement this function to find inode by path
 
     if (inode_index < 0)
@@ -93,10 +96,20 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
             break; // Trying to read beyond the last data block
         }
 
-        char block_data[BLOCK_SIZE];
-        read_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
+        char encrypted_block_data[BLOCK_SIZE];
+        read_volume_block(volume_id, file_inode.datablocks[block_index], encrypted_block_data);
 
-        memcpy(buf + bytes_read, block_data + block_offset, bytes_to_read);
+        // Decrypt the data block
+        unsigned char decrypted_block_data[BLOCK_SIZE];
+        unsigned long long decrypted_block_size;
+
+        if (decrypt_aes_gcm(decrypted_block_data, &decrypted_block_size, (unsigned char *)encrypted_block_data, BLOCK_SIZE, nonce, key) != 0) {
+            return -EIO;  // Decryption failed
+        }
+
+        // Copy the relevant portion of the decrypted block to the user buffer
+        size_t copy_size = MIN(decrypted_block_size - block_offset, bytes_to_read);
+        memcpy(buf + bytes_read, decrypted_block_data + block_offset, copy_size);
 
         bytes_read += bytes_to_read;
         remaining -= bytes_to_read;
@@ -112,6 +125,10 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     (void)fi; // Unused in this example
 
     const char *volume_id = "0"; // Assuming single volume setup
+    unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
+    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    generate_nonce(nonce); // Generate a new nonce for each operation
+
     bitmap_t bmp;
     read_bitmap(volume_id, &bmp);
 
@@ -124,14 +141,22 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     if (file_inode.is_directory)
         return -EISDIR;
 
+    unsigned long long ciphertext_len;
+    unsigned char ciphertext[size + crypto_aead_aes256gcm_ABYTES]; // Allocate space for the ciphertext
+
+    // Encrypt the input buffer
+    if (encrypt_aes_gcm(ciphertext, &ciphertext_len, (const unsigned char *)buf, size, nonce, key) != 0) {
+        return -EIO; // Encryption failed
+    }
+
     size_t bytes_written = 0;
     off_t pos = offset;
 
-    while (bytes_written < size)
+    while (bytes_written < ciphertext_len)
     {
         int block_index = pos / BLOCK_SIZE;
         off_t block_offset = pos % BLOCK_SIZE;
-        size_t bytes_to_write = MIN(BLOCK_SIZE - block_offset, size - bytes_written);
+        size_t bytes_to_write = MIN(BLOCK_SIZE - block_offset, ciphertext_len - bytes_written);
 
         if (block_index >= file_inode.num_datablocks)
         {
@@ -151,8 +176,8 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
             read_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
         }
 
-        // Copy data to block
-        memcpy(block_data + block_offset, buf + bytes_written, bytes_to_write);
+        // Copy encrypted data into the appropriate position in the block
+        memcpy(block_data + block_offset, ciphertext + bytes_written, bytes_to_write);
         write_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
 
         bytes_written += bytes_to_write;
