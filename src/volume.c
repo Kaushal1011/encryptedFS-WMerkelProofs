@@ -18,7 +18,6 @@ void init_volume(volume_info_t *volume, const char *path, volume_type type, int 
     snprintf(volume->merkle_path, MAX_PATH_LENGTH, "%s/merkle_%d.bin", path, volume_id);
     volume->inodes_count = INODES_PER_VOLUME;
     volume->blocks_count = DATA_BLOCKS_PER_VOLUME;
-    volume->type = type;
     volume->merkle_tree = NULL;
     // volume->merkle_tree = initialize_merkle_tree_for_volume(volume->volume_path);
     // save_merkle_tree(volume->merkle_tree, volume->merkle_path);
@@ -46,6 +45,7 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
 
         if (strstr(path, "https") == NULL)
         {
+            sb->vtype = LOCAL;
             printf("Local volume init\n");
             create_volume_files_local(0, sb);
             // Create the root directory inode
@@ -192,7 +192,6 @@ void init_superblock_local(superblock_t *sb)
     strcpy(sb->volumes[0].inodes_path, "./inodes_0.bin");
     strcpy(sb->volumes[0].bitmap_path, "./bmp_0.bin");
     strcpy(sb->volumes[0].volume_path, "./volume_0.bin");
-    sb->volumes[0].type = LOCAL;
     sb->volumes[0].inodes_count = INODES_PER_VOLUME;
     sb->volumes[0].blocks_count = DATA_BLOCKS_PER_VOLUME;
 }

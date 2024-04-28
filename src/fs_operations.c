@@ -20,7 +20,7 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     // Assuming a global or externally accessible superblock `sb` and volume ID `volume_id`
     // extern superblock_t sb;
     // right now kept zero but read it from the superblock
-    const char *volume_id = "0";
+    char volume_id = "0";
 
     // Load the current bitmap to find a free inode
     bitmap_t bmp;
@@ -28,6 +28,17 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     // Allocate a new inode for the file
     int inode_index = allocate_inode_bmp(&bmp, volume_id);
+
+    while (inode_index != -1)
+    {
+        // check if next volume is init or not
+        // if init volume_id = "0" + 1
+        // inode_index = find_inode_index_by_path(volume_id, path);
+        // else init_volume(sb, volume_id+1)
+        // inode_index = find_inode_index_by_path(volume_id, path);
+        break;
+    }
+
     if (inode_index == -1)
     {
         // TODO: volume is full, check for other volumes
@@ -67,8 +78,12 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
     (void)fi; // Unused in this simplified example, but can be used for caching inode index etc.
 
     inode file_inode;
-    const char *volume_id = "0";                                 // Assuming single volume setup for simplicity
+    char volume_id = "0";                                        // Assuming single volume setup for simplicity
     int inode_index = find_inode_index_by_path(volume_id, path); // Implement this function to find inode by path
+
+    // call inode index by path for the next volume if it is initiated, if theres no next volume
+    // no such file exists
+    // in this case files identified by tuple pair (volume id, index)
 
     if (inode_index < 0)
     {
@@ -100,6 +115,7 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
         }
 
         char block_data[BLOCK_SIZE];
+        //  determine volume_id based on file_inode.datablocks[block_index]
         read_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
 
         memcpy(buf + bytes_read, block_data + block_offset, bytes_to_read);
@@ -118,12 +134,15 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 
     (void)fi; // Unused in this example
 
-    const char *volume_id = "0"; // Assuming single volume setup
+    char volume_id = "0"; // Assuming single volume setup
     bitmap_t bmp;
     read_bitmap(volume_id, &bmp);
 
     inode file_inode;
     int inode_index = find_inode_index_by_path(volume_id, path);
+
+    // same as read keep checking until found or no next volume exists
+
     if (inode_index < 0)
         return -ENOENT;
 
@@ -134,6 +153,10 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     size_t bytes_written = 0;
     off_t pos = offset;
 
+    char volume_id_datablocks = "0";
+    //  seprate variable incase we have datablocks in a different volume from inode volume
+    //  for datablock indexing should be index = index*(volume_index+1) when we store in inodes so we know what blocks to read incase of
+    //  fragmented storage
     while (bytes_written < size)
     {
         int block_index = pos / BLOCK_SIZE;
@@ -143,7 +166,10 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
         if (block_index >= file_inode.num_datablocks)
         {
             // Allocate a new block
-            int new_block_index = allocate_data_block(&bmp, volume_id);
+            int new_block_index = allocate_data_block(&bmp, volume_id_datablocks);
+            // check next volume for free data blocks if there isnt a next volume initiate it
+            //  if all volumes full no space left
+            //  block index should handle volume identification logic
             if (new_block_index == -1)
                 return -ENOSPC; // No space left
 
@@ -155,6 +181,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
         // Read existing block data if not writing a full block
         if (bytes_to_write < BLOCK_SIZE)
         {
+            //  while reading determine volume_id based on file_inode.datablocks[block_index]
             read_volume_block_no_check(volume_id, file_inode.datablocks[block_index], block_data);
         }
 
@@ -176,13 +203,17 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     return bytes_written;
 }
 
+// okay checking volumes here and adding logic might be tough
 int fs_truncate(const char *path, off_t newsize)
 {
     printf("truncate\n");
 
     // TODO: Implementing volume management where the volume is more than one
-    const char *volume_id = "0"; // Assuming single volume setup for simplicity
+    char volume_id = "0"; // Assuming single volume setup for simplicity
     int inode_index = find_inode_index_by_path(volume_id, path);
+
+    // finding inode as we did in case of read
+
     if (inode_index < 0)
     {
         return -ENOENT; // File not found
@@ -195,6 +226,10 @@ int fs_truncate(const char *path, off_t newsize)
     {
         return -EISDIR; // Cannot truncate a directory
     }
+
+    //  does shrinking and expanding this will be very tough to implement across volumes because of loading bmps
+    //  for datablocks and volume ids
+    //  case of expanding should be same as implemented for write
 
     bitmap_t bmp;
     read_bitmap(volume_id, &bmp);
@@ -248,8 +283,13 @@ int fs_getattr(const char *path, struct stat *stbuf)
 
     memset(stbuf, 0, sizeof(struct stat)); // Clear the stat buffer
 
-    const char *volume_id = "0";
+    char volume_id = "0";
     int inode_index = find_inode_index_by_path(volume_id, path);
+    //  check in all volumes
+    while (inode_index != -1)
+    {
+        break;
+    }
     if (inode_index == -1)
         return -ENOENT;
 
@@ -277,8 +317,9 @@ int fs_open(const char *path, struct fuse_file_info *fi)
 {
     printf("open\n");
 
-    const char *volume_id = "0"; // Assuming single volume setup
+    char volume_id = "0"; // Assuming single volume setup
     int inode_index = find_inode_index_by_path(volume_id, path);
+    // handle checking for file
     if (inode_index == -1)
         return -ENOENT; // No such file
 
@@ -303,7 +344,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
     (void)offset; // Not used in this function
     (void)fi;     // Not used in this function
 
-    const char *volume_id = "0"; // Assuming single volume setup
+    char volume_id = "0"; // Assuming single volume setup
     // int dir_inode_index = find_inode_index_by_path(volume_id, path)
     int dir_inode_index = 0; // Assuming root directory for now
 
@@ -331,6 +372,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
         return -ENOMEM; // Buffer full
     }
 
+    //  reading across volumes should be supported here
     // List child inodes
     for (int i = 0; i < dir_inode.num_children; i++)
     {
@@ -359,7 +401,8 @@ int fs_rename(const char *from, const char *to)
 {
     printf("rename\n");
 
-    const char *volume_id = "0"; // Assuming single volume setup
+    //  Change to multi volume setup
+    char volume_id = "0"; // Assuming single volume setup
 
     // Find inode index for the source path
     int from_inode_index = find_inode_index_by_path(volume_id, from);
@@ -393,9 +436,11 @@ int fs_rename(const char *from, const char *to)
 
 int fs_unlink(const char *path)
 {
+    // handle mutli volume setup
+    // also clear data blocks for the deleted inode in volume handled setup
     printf("unlink\n");
 
-    const char *volume_id = "0"; // Assuming single volume setup
+    char volume_id = "0";
 
     // Find inode index for the path
     int inode_index = find_inode_index_by_path(volume_id, path);

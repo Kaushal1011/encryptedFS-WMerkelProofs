@@ -8,8 +8,9 @@
 typedef enum volume_type
 {
     LOCAL,
-    FTP,
-    GDRIVE
+    AWS,
+    GDRIVE,
+    FTP
 } volume_type;
 
 typedef struct volume_info
@@ -20,7 +21,6 @@ typedef struct volume_info
     char merkle_path[MAX_PATH_LENGTH];
     int inodes_count;
     int blocks_count;
-    volume_type type;
     MerkleTree *merkle_tree; // Pointer to the Merkle tree of this volume
 } volume_info_t;
 
@@ -29,6 +29,7 @@ typedef struct superblock
     int volume_count;
     int block_size;
     int inode_size;
+    volume_type vtype;
     volume_info_t volumes[10]; // Assume a maximum of 10 volumes
 } superblock_t;
 
