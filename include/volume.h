@@ -32,9 +32,15 @@ typedef struct superblock
     volume_info_t volumes[10]; // Assume a maximum of 10 volumes
 } superblock_t;
 
+extern superblock_t sb;
+
 // Function prototypes for volume operations
 void init_volume(volume_info_t *volume, const char *path, volume_type type, int i);
 void load_or_create_superblock(const char *path, superblock_t *sb);
 void init_superblock_local(superblock_t *sb);
+void create_volume_files_local(int i, superblock_t *sb);
+void read_volume_block(const char *volume_id, int block_index, void *buf);
+void read_volume_block_no_check(const char *volume_id, int block_index, void *buf);
+void write_volume_block(const char *volume_id, int block_index, const void *buf);
 
 #endif // VOLUME_H

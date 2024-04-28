@@ -5,17 +5,20 @@
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <fuse.h>
+#include <libgen.h>
 
-#include "fs_operations.h"  
+#include "fs_operations.h"
+#include "volume.h"
 
 // Define the file system operations here, same as the ones previously in your main file
-int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
     printf("in create\n");
 
     (void)fi; // The fuse_file_info is not used in this simple example
 
     // Assuming a global or externally accessible superblock `sb` and volume ID `volume_id`
-    extern superblock_t sb;
+    // extern superblock_t sb;
     // right now kept zero but read it from the superblock
     const char *volume_id = "0";
 
@@ -27,6 +30,7 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     int inode_index = allocate_inode_bmp(&bmp, volume_id);
     if (inode_index == -1)
     {
+        // TODO: volume is full, check for other volumes
         return -ENOSPC; // No space left for new inode
     }
 
@@ -49,13 +53,15 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
     }
     else
     {
+        // TODO: handle the case where the root directory is full
         return -ENOSPC; // No space left
     }
 
-    return 0; // Success    
+    return 0; // Success
 }
 
-int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
     printf("read\n");
 
     (void)fi; // Unused in this simplified example, but can be used for caching inode index etc.
@@ -106,7 +112,8 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
     return bytes_read;
 }
 
-int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+{
     printf("write\n");
 
     (void)fi; // Unused in this example
@@ -148,7 +155,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
         // Read existing block data if not writing a full block
         if (bytes_to_write < BLOCK_SIZE)
         {
-            read_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
+            read_volume_block_no_check(volume_id, file_inode.datablocks[block_index], block_data);
         }
 
         // Copy data to block
@@ -169,9 +176,11 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     return bytes_written;
 }
 
-int fs_truncate(const char *path, off_t newsize) {
+int fs_truncate(const char *path, off_t newsize)
+{
     printf("truncate\n");
 
+    // TODO: Implementing volume management where the volume is more than one
     const char *volume_id = "0"; // Assuming single volume setup for simplicity
     int inode_index = find_inode_index_by_path(volume_id, path);
     if (inode_index < 0)
@@ -231,7 +240,8 @@ int fs_truncate(const char *path, off_t newsize) {
     return 0; // Success
 }
 
-int fs_getattr(const char *path, struct stat *stbuf) {
+int fs_getattr(const char *path, struct stat *stbuf)
+{
     printf("getattr\n");
 
     printf("path: %s\n", path);
@@ -263,7 +273,8 @@ int fs_getattr(const char *path, struct stat *stbuf) {
     return 0;
 }
 
-int fs_open(const char *path, struct fuse_file_info *fi) {
+int fs_open(const char *path, struct fuse_file_info *fi)
+{
     printf("open\n");
 
     const char *volume_id = "0"; // Assuming single volume setup
@@ -285,7 +296,8 @@ int fs_open(const char *path, struct fuse_file_info *fi) {
     return 0;
 }
 
-int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
+{
     printf("readdir\n");
 
     (void)offset; // Not used in this function
@@ -343,7 +355,8 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
     return 0; // Success
 }
 
-int fs_rename(const char *from, const char *to) {
+int fs_rename(const char *from, const char *to)
+{
     printf("rename\n");
 
     const char *volume_id = "0"; // Assuming single volume setup
@@ -378,7 +391,8 @@ int fs_rename(const char *from, const char *to) {
     return 0; // Success
 }
 
-int fs_unlink(const char *path) {
+int fs_unlink(const char *path)
+{
     printf("unlink\n");
 
     const char *volume_id = "0"; // Assuming single volume setup

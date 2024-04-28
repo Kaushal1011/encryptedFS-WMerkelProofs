@@ -9,6 +9,7 @@
         "inode.h": "c",
         "volume.h": "c",
         "string.h": "c",
-        "stat.h": "c"
+        "stat.h": "c",
+        "bitmap.h": "c"
     }
 }
