@@ -3,6 +3,12 @@
     "files.associations": {
         "types.h": "c",
         "stdlib.h": "c",
-        "math.h": "c"
+        "math.h": "c",
+        "fs_operations.h": "c",
+        "constants.h": "c",
+        "inode.h": "c",
+        "volume.h": "c",
+        "string.h": "c",
+        "stat.h": "c"
     }
 }

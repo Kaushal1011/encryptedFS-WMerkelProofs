@@ -16,7 +16,8 @@
 #define AES_GCM_TAG_SIZE 16
 
 // Define the inode structure
-typedef struct inode {
+typedef struct inode
+{
     int valid;
     int inode_number;
     char path[MAX_PATH_LENGTH];
