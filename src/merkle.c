@@ -221,15 +221,34 @@ MerkleTree *initialize_merkle_tree_for_volume(const char *volume_path)
 void save_node(MerkleNode *node, FILE *file)
 {
     if (!node)
+    {
+        fprintf(file, "null\n"); // Marker for no node
         return;
-    fprintf(file, "%s %d\n", node->hash, node->block_index); // Simplified for clarity
-    char has_left = (node->left != NULL) ? '1' : '0';
-    char has_right = (node->right != NULL) ? '1' : '0';
-    fprintf(file, "%c %c\n", has_left, has_right);
+    }
+    // Save current node's data
+    fprintf(file, "%s %d\n", node->hash, node->block_index);
+
+    // Recursively save left child
     if (node->left)
+    {
+        fprintf(file, "left\n"); // Indicate the start of a left child
         save_node(node->left, file);
+    }
+    else
+    {
+        fprintf(file, "null\n"); // No left child
+    }
+
+    // Recursively save right child
     if (node->right)
+    {
+        fprintf(file, "right\n"); // Indicate the start of a right child
         save_node(node->right, file);
+    }
+    else
+    {
+        fprintf(file, "null\n"); // No right child
+    }
 }
 
 void save_merkle_tree_to_file(MerkleTree *tree, const char *file_path)
@@ -249,22 +268,57 @@ void save_merkle_tree_to_file(MerkleTree *tree, const char *file_path)
 
 MerkleNode *load_node(FILE *file)
 {
+    char line[128];
+    if (!fgets(line, sizeof(line), file) || strcmp(line, "null\n") == 0)
+    {
+        return NULL; // No node to load
+    }
+
     char hash[65];
     int block_index;
-    if (fscanf(file, "%64s %d", hash, &block_index) != 2)
+    if (sscanf(line, "%65s %d", hash, &block_index) != 2)
+    {
+        fprintf(stderr, "Failed to read node data.\n");
         return NULL;
-    char has_left, has_right;
-    if (fscanf(file, " %c %c", &has_left, &has_right) != 2)
-        return NULL;
+    }
+
     MerkleNode *node = create_merkle_node(hash, NULL, NULL, block_index);
-    if (has_left == '1')
+    if (!fgets(line, sizeof(line), file) || strcmp(line, "null\n") == 0)
+    {
+        return node; // No children
+    }
+
+    // Load left child if present
+    if (strcmp(line, "left\n") == 0)
+    {
         node->left = load_node(file);
-    if (has_right == '1')
+        if (node->left)
+        {
+            node->left->parent = node; // Set parent
+
+            // Update min and max indices
+            node->min_index = node->left->min_index;
+            node->max_index = node->left->max_index;
+        }
+    }
+
+    // Assuming right child is next if there's no marker it means file format error or end of file
+    if (!fgets(line, sizeof(line), file) || strcmp(line, "null\n") == 0)
+    {
+        return node; // No right child
+    }
+    if (strcmp(line, "right\n") == 0)
+    {
         node->right = load_node(file);
-    if (node->left)
-        node->left->parent = node;
-    if (node->right)
-        node->right->parent = node;
+        if (node->right)
+        {
+            node->right->parent = node; // Set parent
+            // Update min and max indices
+            node->min_index = node->left->min_index;
+            node->max_index = node->right->max_index;
+        }
+    }
+
     return node;
 }
 
@@ -305,6 +359,12 @@ MerkleNode *find_leaf_node(MerkleNode *node, int block_index)
 {
     printf("Finding leaf node\n");
 
+    printf("Node: %p\n", node);
+
+    printf("Block index: %d\n", block_index);
+
+    printf("Node block index: %d %d %d \n", node->block_index, node->min_index, node->max_index);
+
     if (!node || (block_index < node->min_index || block_index > node->max_index))
     {
         printf("Returning NULL\n");
@@ -338,7 +398,14 @@ MerkleNode *find_leaf_node_in_tree(MerkleTree *tree, int block_index)
     {
         return NULL;
     }
-    return find_leaf_node(tree->root, block_index);
+
+    MerkleNode *leaf = find_leaf_node(tree->root, block_index);
+    if (leaf)
+    {
+        printf("Leaf node found: %s\n", leaf->hash);
+        return leaf;
+    }
+    return NULL;
 }
 
 void update_merkle_node_for_block(const char *volume_id, int block_index, const void *block_data)
