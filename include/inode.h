@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "constants.h"
+#include "bitmap.h"
 
 #define MAX_PATH_LENGTH 256
 #define MAX_NAME_LENGTH 256
@@ -16,7 +17,8 @@
 #define AES_GCM_TAG_SIZE 16
 
 // Define the inode structure
-typedef struct inode {
+typedef struct inode
+{
     int valid;
     int inode_number;
     char path[MAX_PATH_LENGTH];
@@ -46,5 +48,8 @@ typedef struct inode {
 void read_inode(const char *volume_id, int inode_index, inode *inode_buf);
 void write_inode(const char *volume_id, int inode_index, const inode *inode_buf);
 void init_inode(inode *node, const char *path, mode_t mode);
+
+int allocate_inode_bmp(bitmap_t *bmp, const char *volume_id);
+int find_inode_index_by_path(const char *volume_id, const char *target_path);
 
 #endif // INODE_H

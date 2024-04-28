@@ -2,14 +2,17 @@ username := $(shell whoami)
 mountpoint := /home/$(username)/hello
 includepath := -I./include
 srcprefix := ./src/
-files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c ${srcprefix}crypto.c
-cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse` -DFUSE_USE_VERSION=30
-ldflags := $(shell pkg-config --libs fuse) -lsodium
-opflag := -o myFS
+files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c $(srcprefix)merkle.c 
+cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse openssl` -DFUSE_USE_VERSION=30
+ldflags := `pkg-config --libs fuse openssl`
+opflag := -o encryptFS.out
 
 .PHONY: all run drun bgrun compile dcompile checkdir dmkfs mkfs_dcompile mkfs mkfs_compile cleanup
 
 all: compile cleanup
+
+clean:
+	-rm -f encryptFS.out
 
 run: compile cleanup
 	$(opflag) -f $(mountpoint) /home/$(username)/file.txt

@@ -4,52 +4,62 @@
 #include <stdbool.h>
 
 // Read a bitmap from file
-void read_bitmap(const char *volume_id, bitmap_t *bmp) {
+void read_bitmap(const char *volume_id, bitmap_t *bmp)
+{
     char bmp_filename[256];
     sprintf(bmp_filename, "bmp_%s.bin", volume_id);
     FILE *file = fopen(bmp_filename, "rb");
-    if (file) {
+    if (file)
+    {
         fread(bmp, sizeof(bitmap_t), 1, file);
         fclose(file);
-    } else {
+    }
+    else
+    {
         perror("Failed to open bitmap file for reading");
     }
 }
 
 // Write a bitmap to file
-void write_bitmap(const char *volume_id, const bitmap_t *bmp) {
+void write_bitmap(const char *volume_id, const bitmap_t *bmp)
+{
     char bmp_filename[256];
     sprintf(bmp_filename, "bmp_%s.bin", volume_id);
     FILE *file = fopen(bmp_filename, "wb");
-    if (file) {
+    if (file)
+    {
         fwrite(bmp, sizeof(bitmap_t), 1, file);
         fclose(file);
-    } else {
+    }
+    else
+    {
         perror("Failed to open bitmap file for writing");
     }
 }
 
 // Set a bit in a bitmap
-void set_bit(unsigned char *bitmap, int index) {
+void set_bit(char *bitmap, int index)
+{
     int byte_index = index / 8;
     int bit_index = index % 8;
     bitmap[byte_index] |= (1 << bit_index);
 }
 
 // Clear a bit in a bitmap
-void clear_bit(unsigned char *bitmap, int index) {
+void clear_bit(char *bitmap, int index)
+{
     int byte_index = index / 8;
     int bit_index = index % 8;
     bitmap[byte_index] &= ~(1 << bit_index);
 }
 
 // Check if a bit is free in a bitmap
-bool is_bit_free(unsigned char *bitmap, int index) {
+bool is_bit_free(char *bitmap, int index)
+{
     int byte_index = index / 8;
     int bit_index = index % 8;
     return !(bitmap[byte_index] & (1 << bit_index));
 }
-
 
 int allocate_data_block(bitmap_t *bmp, const char *volume_id)
 {
