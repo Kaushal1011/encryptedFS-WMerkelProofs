@@ -13,11 +13,11 @@ typedef struct bitmap
 } bitmap_t;
 
 // Function prototypes for bitmap operations
-void read_bitmap(const char *volume_id, bitmap_t *bmp);
-void write_bitmap(const char *volume_id, const bitmap_t *bmp);
+void read_bitmap(char *volume_id, bitmap_t *bmp);
+void write_bitmap(char *volume_id, const bitmap_t *bmp);
 void set_bit(char *bitmap, int index);
 void clear_bit(char *bitmap, int index);
 bool is_bit_free(char *bitmap, int index);
-int allocate_data_block(bitmap_t *bmp, const char *volume_id);
+int allocate_data_block(bitmap_t *bmp, char *volume_id);
 
 #endif // BITMAP_H

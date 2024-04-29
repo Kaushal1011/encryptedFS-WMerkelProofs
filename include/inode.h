@@ -44,11 +44,11 @@ typedef struct inode
 } inode;
 
 // Function prototypes for inode operations
-void read_inode(const char *volume_id, int inode_index, inode *inode_buf);
-void write_inode(const char *volume_id, int inode_index, const inode *inode_buf);
+void read_inode(char *volume_id, int inode_index, inode *inode_buf);
+void write_inode(char *volume_id, int inode_index, const inode *inode_buf);
 void init_inode(inode *node, const char *path, mode_t mode);
 
-int allocate_inode_bmp(bitmap_t *bmp, const char *volume_id);
-int find_inode_index_by_path(const char *volume_id, const char *target_path);
+int allocate_inode_bmp(bitmap_t *bmp, char *volume_id);
+int find_inode_index_by_path(char *volume_id, const char *target_path);
 
 #endif // INODE_H

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 // Read a bitmap from file
-void read_bitmap(const char *volume_id, bitmap_t *bmp)
+void read_bitmap(char *volume_id, bitmap_t *bmp)
 {
     char bmp_filename[256];
     sprintf(bmp_filename, "bmp_%s.bin", volume_id);
@@ -21,7 +21,7 @@ void read_bitmap(const char *volume_id, bitmap_t *bmp)
 }
 
 // Write a bitmap to file
-void write_bitmap(const char *volume_id, const bitmap_t *bmp)
+void write_bitmap(char *volume_id, const bitmap_t *bmp)
 {
     char bmp_filename[256];
     sprintf(bmp_filename, "bmp_%s.bin", volume_id);
@@ -61,7 +61,7 @@ bool is_bit_free(char *bitmap, int index)
     return !(bitmap[byte_index] & (1 << bit_index));
 }
 
-int allocate_data_block(bitmap_t *bmp, const char *volume_id)
+int allocate_data_block(bitmap_t *bmp, char *volume_id)
 {
     for (int i = 0; i < DATA_BLOCKS_PER_VOLUME; ++i)
     {

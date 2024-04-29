@@ -112,7 +112,7 @@ void create_volume_files_local(int i, superblock_t *sb)
     fclose(merkle_file);
 }
 
-void read_volume_block_no_check(const char *volume_id, int block_index, void *buf)
+void read_volume_block_no_check(char *volume_id, int block_index, void *buf)
 {
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
@@ -131,7 +131,7 @@ void read_volume_block_no_check(const char *volume_id, int block_index, void *bu
     printf("Reading block %d from volume %s\n", block_index, volume_id);
 }
 
-void read_volume_block(const char *volume_id, int block_index, void *buf)
+void read_volume_block(char *volume_id, int block_index, void *buf)
 {
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
@@ -156,7 +156,7 @@ void read_volume_block(const char *volume_id, int block_index, void *buf)
     }
 }
 
-void write_volume_block(const char *volume_id, int block_index, const void *buf)
+void write_volume_block(char *volume_id, int block_index, const void *buf)
 {
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);

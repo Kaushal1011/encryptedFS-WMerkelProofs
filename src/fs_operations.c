@@ -20,7 +20,7 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     // Assuming a global or externally accessible superblock `sb` and volume ID `volume_id`
     // extern superblock_t sb;
     // right now kept zero but read it from the superblock
-    char volume_id = "0";
+    char volume_id[2] = "0";
 
     // Load the current bitmap to find a free inode
     bitmap_t bmp;
@@ -78,7 +78,7 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
     (void)fi; // Unused in this simplified example, but can be used for caching inode index etc.
 
     inode file_inode;
-    char volume_id = "0";                                        // Assuming single volume setup for simplicity
+    char volume_id[2] = "0";                                     // Assuming single volume setup for simplicity
     int inode_index = find_inode_index_by_path(volume_id, path); // Implement this function to find inode by path
 
     // call inode index by path for the next volume if it is initiated, if theres no next volume
@@ -134,7 +134,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 
     (void)fi; // Unused in this example
 
-    char volume_id = "0"; // Assuming single volume setup
+    char volume_id[2] = "0"; // Assuming single volume setup
     bitmap_t bmp;
     read_bitmap(volume_id, &bmp);
 
@@ -153,7 +153,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     size_t bytes_written = 0;
     off_t pos = offset;
 
-    char volume_id_datablocks = "0";
+    char *volume_id_datablocks = "0";
     //  seprate variable incase we have datablocks in a different volume from inode volume
     //  for datablock indexing should be index = index*(volume_index+1) when we store in inodes so we know what blocks to read incase of
     //  fragmented storage
@@ -209,7 +209,7 @@ int fs_truncate(const char *path, off_t newsize)
     printf("truncate\n");
 
     // TODO: Implementing volume management where the volume is more than one
-    char volume_id = "0"; // Assuming single volume setup for simplicity
+    char volume_id[2] = "0"; // Assuming single volume setup for simplicity
     int inode_index = find_inode_index_by_path(volume_id, path);
 
     // finding inode as we did in case of read
@@ -283,7 +283,7 @@ int fs_getattr(const char *path, struct stat *stbuf)
 
     memset(stbuf, 0, sizeof(struct stat)); // Clear the stat buffer
 
-    char volume_id = "0";
+    char volume_id[2] = "0";
     int inode_index = find_inode_index_by_path(volume_id, path);
     //  check in all volumes
     while (inode_index != -1)
@@ -317,7 +317,7 @@ int fs_open(const char *path, struct fuse_file_info *fi)
 {
     printf("open\n");
 
-    char volume_id = "0"; // Assuming single volume setup
+    char volume_id[2] = "0"; // Assuming single volume setup
     int inode_index = find_inode_index_by_path(volume_id, path);
     // handle checking for file
     if (inode_index == -1)
@@ -344,7 +344,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
     (void)offset; // Not used in this function
     (void)fi;     // Not used in this function
 
-    char volume_id = "0"; // Assuming single volume setup
+    char volume_id[2] = "0"; // Assuming single volume setup
     // int dir_inode_index = find_inode_index_by_path(volume_id, path)
     int dir_inode_index = 0; // Assuming root directory for now
 
@@ -402,7 +402,7 @@ int fs_rename(const char *from, const char *to)
     printf("rename\n");
 
     //  Change to multi volume setup
-    char volume_id = "0"; // Assuming single volume setup
+    char volume_id[2] = "0"; // Assuming single volume setup
 
     // Find inode index for the source path
     int from_inode_index = find_inode_index_by_path(volume_id, from);
@@ -440,7 +440,7 @@ int fs_unlink(const char *path)
     // also clear data blocks for the deleted inode in volume handled setup
     printf("unlink\n");
 
-    char volume_id = "0";
+    char volume_id[2] = "0";
 
     // Find inode index for the path
     int inode_index = find_inode_index_by_path(volume_id, path);

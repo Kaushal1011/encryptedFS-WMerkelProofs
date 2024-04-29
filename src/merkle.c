@@ -169,13 +169,13 @@ bool verify_merkle_path(MerkleNode *leaf_node, const char *expected_root_hash, c
     return compare_hashes(current_hash, expected_root_hash);
 }
 
-int get_number_of_blocks(const char *volume_path)
+int get_number_of_blocks(char *volume_path)
 {
     return DATA_BLOCKS_PER_VOLUME;
 }
 
 // this function will have to decrypt the block and then compute the hash
-void get_block_hash(const char *volume_path, int block_index, char *hash)
+void get_block_hash(char *volume_path, int block_index, char *hash)
 {
     printf("Getting block hash\n");
 
@@ -194,7 +194,7 @@ void generate_random_hash(char *hash, size_t size)
     }
 }
 
-MerkleTree *initialize_merkle_tree_for_volume(const char *volume_path)
+MerkleTree *initialize_merkle_tree_for_volume(char *volume_path)
 {
     printf("Initializing merkle tree\n");
 
@@ -346,7 +346,7 @@ MerkleTree *load_merkle_tree_from_file(const char *file_path)
     return tree;
 }
 
-MerkleTree *get_merkle_tree_for_volume(const char *volume_id)
+MerkleTree *get_merkle_tree_for_volume(char *volume_id)
 {
     printf("Getting merkle tree for volume %s\n", volume_id);
     extern superblock_t sb;
@@ -408,7 +408,7 @@ MerkleNode *find_leaf_node_in_tree(MerkleTree *tree, int block_index)
     return NULL;
 }
 
-void update_merkle_node_for_block(const char *volume_id, int block_index, const void *block_data)
+void update_merkle_node_for_block(char *volume_id, int block_index, const void *block_data)
 {
     extern superblock_t sb;
     printf("Updating merkle node for block\n");
@@ -434,7 +434,7 @@ void update_merkle_node_for_block(const char *volume_id, int block_index, const 
     save_merkle_tree_to_file(tree, sb.volumes[atoi(volume_id)].merkle_path);
 }
 
-void get_root_hash(const char *volume_id, char *root_hash)
+void get_root_hash(char *volume_id, char *root_hash)
 {
     MerkleTree *tree = get_merkle_tree_for_volume(volume_id);
     if (tree)
@@ -447,7 +447,7 @@ void get_root_hash(const char *volume_id, char *root_hash)
     }
 }
 
-bool verify_block_integrity(const char *volume_id, int block_index)
+bool verify_block_integrity(char *volume_id, int block_index)
 {
     printf("Verifying block integrity\n");
     MerkleTree *tree = get_merkle_tree_for_volume(volume_id);

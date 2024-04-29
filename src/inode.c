@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 // Read an inode from file
-void read_inode(const char *volume_id, int inode_index, inode *inode_buf)
+void read_inode(char *volume_id, int inode_index, inode *inode_buf)
 {
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
@@ -24,7 +24,7 @@ void read_inode(const char *volume_id, int inode_index, inode *inode_buf)
 }
 
 // Write an inode to file
-void write_inode(const char *volume_id, int inode_index, const inode *inode_buf)
+void write_inode(char *volume_id, int inode_index, const inode *inode_buf)
 {
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
@@ -90,7 +90,7 @@ void init_inode(inode *node, const char *path, mode_t mode)
     node->num_links = 1;  // A newly created file typically has one link
 }
 
-int allocate_inode_bmp(bitmap_t *bmp, const char *volume_id)
+int allocate_inode_bmp(bitmap_t *bmp, char *volume_id)
 {
     for (int i = 0; i < INODES_PER_VOLUME; ++i)
     {
@@ -109,7 +109,7 @@ int allocate_inode_bmp(bitmap_t *bmp, const char *volume_id)
 }
 
 // temporary implementation
-int find_inode_index_by_path(const char *volume_id, const char *target_path)
+int find_inode_index_by_path(char *volume_id, const char *target_path)
 {
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
