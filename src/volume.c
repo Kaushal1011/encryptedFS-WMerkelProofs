@@ -3,6 +3,7 @@
 #include "inode.h"
 #include "merkle.h"
 #include "constants.h"
+#include "crypto.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -136,11 +137,17 @@ void read_volume_block(char *volume_id, int block_index, void *buf)
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "rb");
+    unsigned char encrypted_data[BLOCK_SIZE];
+    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    unsigned long long decrypted_len;
+
     if (file)
     {
-        fseek(file, block_index * BLOCK_SIZE, SEEK_SET);
-        fread(buf, BLOCK_SIZE, 1, file);
+        fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
+        fread(nonce, sizeof(nonce), 1, file);  // Read nonce first
+        fread(encrypted_data, BLOCK_SIZE, 1, file);
         fclose(file);
+        decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, BLOCK_SIZE, nonce, key);
     }
     else
     {
@@ -161,10 +168,18 @@ void write_volume_block(char *volume_id, int block_index, const void *buf)
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "r+b"); // Open for reading and writing; binary mode
+    unsigned char encrypted_data[BLOCK_SIZE];
+    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    unsigned long long ciphertext_len;
+
+    generate_nonce(nonce);  // Generate nonce
+
     if (file)
     {
-        fseek(file, block_index * BLOCK_SIZE, SEEK_SET);
-        fwrite(buf, BLOCK_SIZE, 1, file);
+        fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
+        fwrite(nonce, sizeof(nonce), 1, file);  // Write nonce first
+        encrypt_aes_gcm(encrypted_data, &ciphertext_len, buf, BLOCK_SIZE, nonce, key);
+        fwrite(encrypted_data, BLOCK_SIZE, 1, file);
         fclose(file);
     }
     else

@@ -1,4 +1,5 @@
 #include "inode.h"
+#include "crypto.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,8 +14,21 @@ void read_inode(char *volume_id, int inode_index, inode *inode_buf)
     FILE *file = fopen(inode_filename, "rb");
     if (file)
     {
-        fseek(file, inode_index * sizeof(inode), SEEK_SET);
-        fread(inode_buf, sizeof(inode), 1, file);
+        unsigned char encrypted_data[sizeof(inode) + crypto_aead_aes256gcm_ABYTES];
+        unsigned long long decrypted_len;
+        unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+        unsigned char key[crypto_aead_aes256gcm_KEYBYTES]; // This should be the same key used for encryption
+
+        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
+        fread(nonce, sizeof(nonce), 1, file);
+        fread(encrypted_data, sizeof(encrypted_data), 1, file);
+        
+        if (decrypt_aes_gcm((unsigned char*)inode_buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0) {
+            perror("Failed to decrypt inode");
+            fclose(file);
+            return;
+        }
+
         fclose(file);
     }
     else
@@ -31,8 +45,23 @@ void write_inode(char *volume_id, int inode_index, const inode *inode_buf)
     FILE *file = fopen(inode_filename, "r+b");
     if (file)
     {
-        fseek(file, inode_index * sizeof(inode), SEEK_SET);
-        fwrite(inode_buf, sizeof(inode), 1, file);
+        unsigned char encrypted_data[sizeof(inode) + crypto_aead_aes256gcm_ABYTES];
+        unsigned long long ciphertext_len;
+        unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+        unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
+        
+        generate_nonce(nonce);
+        generate_key(key);  // Ideally, you would use a persistent key
+
+        if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, (unsigned char*)inode_buf, sizeof(inode), nonce, key) != 0) {
+            perror("Failed to encrypt inode");
+            fclose(file);
+            return;
+        }
+
+        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
+        fwrite(nonce, sizeof(nonce), 1, file);
+        fwrite(encrypted_data, ciphertext_len, 1, file);
         fclose(file);
     }
     else
