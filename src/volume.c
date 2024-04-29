@@ -13,18 +13,15 @@ superblock_t sb;
 // Initialize a volume with default paths and settings
 void init_volume(volume_info_t *volume, const char *path, volume_type type, int volume_id)
 {
-    snprintf(volume->inodes_path, MAX_PATH_LENGTH, "%s/inodes_%d.bin", path, volume_id);
-    snprintf(volume->bitmap_path, MAX_PATH_LENGTH, "%s/bmp_%d.bin", path, volume_id);
-    snprintf(volume->volume_path, MAX_PATH_LENGTH, "%s/volume_%d.bin", path, volume_id);
-    snprintf(volume->merkle_path, MAX_PATH_LENGTH, "%s/merkle_%d.bin", path, volume_id);
+    snprintf(volume->inodes_path, MAX_PATH_LENGTH, "%sinodes_%d.bin", path, volume_id);
+    snprintf(volume->bitmap_path, MAX_PATH_LENGTH, "%sbmp_%d.bin", path, volume_id);
+    snprintf(volume->volume_path, MAX_PATH_LENGTH, "%svolume_%d.bin", path, volume_id);
+    snprintf(volume->merkle_path, MAX_PATH_LENGTH, "%smerkle_%d.bin", path, volume_id);
     volume->inodes_count = INODES_PER_VOLUME;
     volume->blocks_count = DATA_BLOCKS_PER_VOLUME;
     volume->merkle_tree = NULL;
-    // volume->merkle_tree = initialize_merkle_tree_for_volume(volume->volume_path);
-    // save_merkle_tree(volume->merkle_tree, volume->merkle_path);
 }
 
-// Load or create a superblock for the filesystem
 void load_or_create_superblock(const char *path, superblock_t *sb)
 {
     FILE *file = fopen(path, "rb+");
@@ -33,54 +30,50 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
         printf("Superblock file not found, creating a new one.\n");
         file = fopen(path, "wb+");
         for (int i = 0; i < 10; i++)
-        {                                                 // Initialize each volume info
-            init_volume(&sb->volumes[i], "./", LOCAL, i); // Default initialization
+        {
+            init_volume(&sb->volumes[i], "./", LOCAL, i);
         }
-        sb->volume_count = 1; // Start with one volume
+        sb->volume_count = 1;
         sb->block_size = BLOCK_SIZE;
         sb->inode_size = INODE_SIZE;
-
-        printf("here\n");
-
-        // create the first volume
-
-        if (strstr(path, "https") == NULL)
-        {
-            sb->vtype = LOCAL;
-            printf("Local volume init\n");
-            create_volume_files_local(0, sb);
-            // Create the root directory inode
-            inode root_inode;
-            init_inode(&root_inode, "/", S_IFDIR | 0777); // Root directory
-            write_inode("0", 0, &root_inode);             // Assuming the root inode is in volume 0
-            // Create the root directory bitmap
-            bitmap_t root_bmp;
-            memset(root_bmp.inode_bmp, 0, sizeof(root_bmp.inode_bmp));
-            memset(root_bmp.datablock_bmp, 0, sizeof(root_bmp.datablock_bmp));
-            set_bit(root_bmp.inode_bmp, 0); // Mark the root inode as used
-            write_bitmap("0", &root_bmp);   // Assuming the root bitmap is in volume 0
-        }
-        else
-        {
-            // remote volume init is missing
-            //  add support for remote volume here
-        }
-
+        create_volume_files_local(0, sb);
+        create_volume_files_local(0, sb);
+        // Create the root directory inode
+        create_volume_files_local(0, sb);
+        // Create the root directory inode
+        inode root_inode;
+        init_inode(&root_inode, "/", S_IFDIR | 0777);
+        write_inode("0", 0, &root_inode);
+        bitmap_t root_bmp;
+        memset(&root_bmp, 0, sizeof(root_bmp));
+        set_bit(root_bmp.inode_bmp, 0);
+        write_bitmap("0", &root_bmp);
         fwrite(sb, sizeof(superblock_t), 1, file);
     }
     else
     {
         fread(sb, sizeof(superblock_t), 1, file);
-        // Load merkle trees for each volume , the stored pointer will be invalid
-        int num_vol = sb->volume_count;
-        for (int i = 0; i < num_vol; i++)
+        for (int i = 0; i < sb->volume_count; i++)
         {
-            printf("Loading merkle tree for volume %d\n", i);
-            // load merkle tree for each volume
             sb->volumes[i].merkle_tree = load_merkle_tree_from_file(sb->volumes[i].merkle_path);
         }
     }
     fclose(file);
+
+    printf("Superblock loaded\n");
+    printf("Volume count: %d\n", sb->volume_count);
+    printf("Block size: %d\n", sb->block_size);
+    printf("Inode size: %d\n", sb->inode_size);
+    for (int i = 0; i < sb->volume_count; i++)
+    {
+        printf("Volume %d:\n", i);
+        printf("Inodes path: %s\n", sb->volumes[i].inodes_path);
+        printf("Bitmap path: %s\n", sb->volumes[i].bitmap_path);
+        printf("Volume path: %s\n", sb->volumes[i].volume_path);
+        printf("Merkle path: %s\n", sb->volumes[i].merkle_path);
+        printf("Inodes count: %d\n", sb->volumes[i].inodes_count);
+        printf("Blocks count: %d\n", sb->volumes[i].blocks_count);
+    }
 }
 
 void create_volume_files_local(int i, superblock_t *sb)
@@ -110,7 +103,6 @@ void create_volume_files_local(int i, superblock_t *sb)
         save_merkle_tree_to_file(merkle_tree, sb->volumes[i].merkle_path);
         sb->volumes[i].merkle_tree = merkle_tree;
     }
-    fclose(merkle_file);
 }
 
 void read_volume_block_no_check(char *volume_id, int block_index, void *buf)
@@ -118,25 +110,25 @@ void read_volume_block_no_check(char *volume_id, int block_index, void *buf)
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "rb");
-    unsigned char encrypted_data[BLOCK_SIZE];
+    unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES];
     unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
     unsigned long long decrypted_len;
 
     if (file)
     {
-        fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
-        fread(nonce, sizeof(nonce), 1, file); // Read nonce first
-        fread(encrypted_data, BLOCK_SIZE, 1, file);
+        fseek(file, block_index * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
+        fread(nonce, sizeof(nonce), 1, file);
+        fread(encrypted_data, sizeof(encrypted_data), 1, file);
         fclose(file);
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, BLOCK_SIZE, nonce, key);
+        if (decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
+        {
+            printf("Decryption failed for block %d in volume %s\n", block_index, volume_id);
+        }
     }
     else
     {
-        // Handle error: volume file not found
+        printf("Error: File %s not found.\n", volume_filename);
     }
-
-    printf("Reading block %d from volume %s\n", block_index, volume_id);
 }
 
 void read_volume_block(char *volume_id, int block_index, void *buf)
@@ -144,68 +136,77 @@ void read_volume_block(char *volume_id, int block_index, void *buf)
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "rb");
-    unsigned char encrypted_data[BLOCK_SIZE];
+    unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES];
     unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
     unsigned long long decrypted_len;
 
     if (file)
     {
-        fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
-        fread(nonce, sizeof(nonce), 1, file); // Read nonce first
-        fread(encrypted_data, BLOCK_SIZE, 1, file);
+        fseek(file, block_index * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
+        fread(nonce, sizeof(nonce), 1, file);
+        fread(encrypted_data, sizeof(encrypted_data), 1, file);
         fclose(file);
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, BLOCK_SIZE, nonce, key);
+        if (decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
+        {
+            printf("Decryption failed for block %d in volume %s\n", block_index, volume_id);
+        }
     }
     else
     {
-        // Handle error: volume file not found
+        printf("Error: File %s not found.\n", volume_filename);
     }
-
-    printf("Reading block %d from volume %s\n", block_index, volume_id);
 
     if (!verify_block_integrity(volume_id, block_index))
     {
         printf("Integrity check failed for block %d in volume %s\n", block_index, volume_id);
-        // Handle the integrity check failure as needed
     }
 }
 
-void write_volume_block(char *volume_id, int block_index, const void *buf)
+void write_volume_block(char *volume_id, int block_index, const void *buf, size_t buf_size)
 {
     char volume_filename[256];
-    sprintf(volume_filename, "volume_%s.bin", volume_id);
-    FILE *file = fopen(volume_filename, "r+b"); // Open for reading and writing; binary mode
-    unsigned char encrypted_data[BLOCK_SIZE];
+    unsigned char block_buffer[BLOCK_SIZE];
+    unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES];
     unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
     unsigned long long ciphertext_len;
 
-    generate_nonce(nonce); // Generate nonce
+    // Ensure the buffer size does not exceed BLOCK_SIZE
+    if (buf_size > BLOCK_SIZE)
+    {
+        printf("Buffer size exceeds block size. Truncation may occur.\n");
+        buf_size = BLOCK_SIZE;
+    }
+
+    // Prepare the block buffer with padding
+    memcpy(block_buffer, buf, buf_size);
+    if (buf_size < BLOCK_SIZE)
+    {
+        memset(block_buffer + buf_size, 0, BLOCK_SIZE - buf_size); // Zero padding
+    }
+
+    // Prepare file and encryption
+    sprintf(volume_filename, "volume_%s.bin", volume_id);
+    FILE *file = fopen(volume_filename, "r+b");
+    generate_nonce(nonce);
 
     if (file)
     {
-        fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        fwrite(nonce, sizeof(nonce), 1, file); // Write nonce first
-        encrypt_aes_gcm(encrypted_data, &ciphertext_len, buf, BLOCK_SIZE, nonce, key);
-        fwrite(encrypted_data, BLOCK_SIZE, 1, file);
+        fseek(file, block_index * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
+        fwrite(nonce, sizeof(nonce), 1, file);
+        if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, block_buffer, BLOCK_SIZE, nonce, key) != 0)
+        {
+            printf("Encryption failed for block %d in volume %s\n", block_index, volume_id);
+        }
+        fwrite(encrypted_data, BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES, 1, file);
         fclose(file);
     }
     else
     {
-        // Handle error: volume file not found or unable to write
+        printf("Error: Unable to write to file %s.\n", volume_filename);
     }
 
-    // read the whole block from the volume to update the merkle tree
-    char block_data[BLOCK_SIZE];
-
-    read_volume_block_no_check(volume_id, block_index, block_data);
-
-    //  TODO: Read before updating the block
-
-    update_merkle_node_for_block(volume_id, block_index, block_data);
+    update_merkle_node_for_block(volume_id, block_index, block_buffer);
 }
-
 // Function to initialize a new superblock
 void init_superblock_local(superblock_t *sb)
 {

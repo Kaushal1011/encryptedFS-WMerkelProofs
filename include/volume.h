@@ -42,6 +42,6 @@ void init_superblock_local(superblock_t *sb);
 void create_volume_files_local(int i, superblock_t *sb);
 void read_volume_block(char *volume_id, int block_index, void *buf);
 void read_volume_block_no_check(char *volume_id, int block_index, void *buf);
-void write_volume_block(char *volume_id, int block_index, const void *buf);
+void write_volume_block(char *volume_id, int block_index, const void *buf, size_t buf_size);
 
 #endif // VOLUME_H

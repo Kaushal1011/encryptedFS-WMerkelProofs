@@ -255,6 +255,8 @@ void save_merkle_tree_to_file(MerkleTree *tree, const char *file_path)
 {
     printf("Saving merkle tree to file\n");
 
+    printf("File path: %s\n", file_path);
+
     FILE *file = fopen(file_path, "wb");
     if (!file)
     {
@@ -264,6 +266,8 @@ void save_merkle_tree_to_file(MerkleTree *tree, const char *file_path)
 
     save_node(tree->root, file);
     fclose(file);
+
+    printf("Merkle tree saved to file\n");
 }
 
 MerkleNode *load_node(FILE *file)
@@ -447,6 +451,7 @@ void get_root_hash(char *volume_id, char *root_hash)
     }
 }
 
+//  take decrypted block hash as functiton param
 bool verify_block_integrity(char *volume_id, int block_index)
 {
     printf("Verifying block integrity\n");

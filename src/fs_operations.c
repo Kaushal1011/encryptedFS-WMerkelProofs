@@ -163,10 +163,13 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
         off_t block_offset = pos % BLOCK_SIZE;
         size_t bytes_to_write = MIN(BLOCK_SIZE - block_offset, size - bytes_written);
 
+        int allocate_new_block = 0;
+
         if (block_index >= file_inode.num_datablocks)
         {
             // Allocate a new block
             int new_block_index = allocate_data_block(&bmp, volume_id_datablocks);
+            allocate_new_block = 1;
             // check next volume for free data blocks if there isnt a next volume initiate it
             //  if all volumes full no space left
             //  block index should handle volume identification logic
@@ -179,7 +182,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 
         char block_data[BLOCK_SIZE] = {0};
         // Read existing block data if not writing a full block
-        if (bytes_to_write < BLOCK_SIZE)
+        if (bytes_to_write < BLOCK_SIZE && allocate_new_block == 0)
         {
             //  while reading determine volume_id based on file_inode.datablocks[block_index]
             read_volume_block_no_check(volume_id, file_inode.datablocks[block_index], block_data);
@@ -187,7 +190,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 
         // Copy data to block
         memcpy(block_data + block_offset, buf + bytes_written, bytes_to_write);
-        write_volume_block(volume_id, file_inode.datablocks[block_index], block_data);
+        write_volume_block(volume_id, file_inode.datablocks[block_index], block_data, BLOCK_SIZE);
 
         bytes_written += bytes_to_write;
         pos += bytes_to_write;
@@ -198,6 +201,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     {
         file_inode.size = offset + size;
     }
+    printf("file_inode.size: %ld\n", file_inode.size);
     write_inode(volume_id, inode_index, &file_inode);
 
     return bytes_written;
@@ -263,7 +267,7 @@ int fs_truncate(const char *path, off_t newsize)
 
             // Initialize the new block to zero
             char zero_block[BLOCK_SIZE] = {0};
-            write_volume_block(volume_id, new_block_index, zero_block);
+            write_volume_block(volume_id, new_block_index, zero_block, BLOCK_SIZE);
         }
     }
 

@@ -21,6 +21,7 @@
 #include "volume.h"
 #include "crypto.h"
 #include <sodium/crypto_aead_aes256gcm.h>
+#include <sodium.h>
 
 void add_inode_to_directory(int dir_inode_index, int file_inode_index)
 {
