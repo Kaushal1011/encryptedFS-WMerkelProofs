@@ -9,6 +9,8 @@
 // Read an inode from file
 void read_inode(char *volume_id, int inode_index, inode *inode_buf)
 {
+
+    printf("Reading inode %d\n", inode_index);
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
     FILE *file = fopen(inode_filename, "rb");
@@ -17,13 +19,13 @@ void read_inode(char *volume_id, int inode_index, inode *inode_buf)
         unsigned char encrypted_data[sizeof(inode) + crypto_aead_aes256gcm_ABYTES];
         unsigned long long decrypted_len;
         unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
-        unsigned char key[crypto_aead_aes256gcm_KEYBYTES]; // This should be the same key used for encryption
-
+        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
         fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
         fread(nonce, sizeof(nonce), 1, file);
         fread(encrypted_data, sizeof(encrypted_data), 1, file);
-        
-        if (decrypt_aes_gcm((unsigned char*)inode_buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0) {
+
+        if (decrypt_aes_gcm((unsigned char *)inode_buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
+        {
             perror("Failed to decrypt inode");
             fclose(file);
             return;
@@ -40,20 +42,30 @@ void read_inode(char *volume_id, int inode_index, inode *inode_buf)
 // Write an inode to file
 void write_inode(char *volume_id, int inode_index, const inode *inode_buf)
 {
+    printf("Writing inode %d\n", inode_index);
+
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
+
+    printf("Writing inode %d\n", inode_index);
+    printf("Writing inode %s\n", inode_filename);
     FILE *file = fopen(inode_filename, "r+b");
     if (file)
     {
         unsigned char encrypted_data[sizeof(inode) + crypto_aead_aes256gcm_ABYTES];
         unsigned long long ciphertext_len;
         unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
-        unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        
-        generate_nonce(nonce);
-        generate_key(key);  // Ideally, you would use a persistent key
+        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
 
-        if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, (unsigned char*)inode_buf, sizeof(inode), nonce, key) != 0) {
+        printf("key %s\n", key);
+
+        generate_nonce(nonce);
+        int retFlag = encrypt_aes_gcm(encrypted_data, &ciphertext_len, (unsigned char *)inode_buf, sizeof(inode), nonce, key);
+
+        printf("retFlag %d\n", retFlag);
+
+        if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, (unsigned char *)inode_buf, sizeof(inode), nonce, key) != 0)
+        {
             perror("Failed to encrypt inode");
             fclose(file);
             return;
@@ -153,18 +165,15 @@ int find_inode_index_by_path(char *volume_id, const char *target_path)
     }
 
     inode temp_inode;
-    int inode_index = 0;
 
-    // Loop through all inodes in the volume
-    while (fread(&temp_inode, sizeof(inode), 1, file) == 1)
+    for (int i = 0; i < INODES_PER_VOLUME; i++)
     {
-        // printf("temp_inode.path: %s\n", temp_inode.path);
-        if (temp_inode.valid && strcmp(temp_inode.path, target_path) == 0)
+        read_inode(volume_id, i, &temp_inode);
+        if (strcmp(temp_inode.path, target_path) == 0)
         {
             fclose(file);
-            return inode_index; // Found the inode for the given path
+            return i;
         }
-        inode_index++;
     }
 
     fclose(file);

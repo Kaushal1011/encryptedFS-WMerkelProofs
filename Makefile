@@ -2,9 +2,9 @@ username := $(shell whoami)
 mountpoint := /home/$(username)/hello
 includepath := -I./include
 srcprefix := ./src/
-files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c $(srcprefix)merkle.c 
-cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse openssl` -DFUSE_USE_VERSION=30
-ldflags := `pkg-config --libs fuse openssl`
+files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c $(srcprefix)merkle.c $(srcprefix)crypto.c 
+cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse openssl libsodium` -DFUSE_USE_VERSION=30
+ldflags := `pkg-config --libs fuse openssl libsodium`
 opflag := -o encryptFS.out
 
 .PHONY: all run drun bgrun compile dcompile checkdir dmkfs mkfs_dcompile mkfs mkfs_compile cleanup
