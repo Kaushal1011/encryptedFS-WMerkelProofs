@@ -118,22 +118,28 @@ void read_volume_block_no_check(char *volume_id, int block_index, void *buf)
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "rb");
-    unsigned char encrypted_data[BLOCK_SIZE];
-    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    unsigned char encrypted_data[sizeof(BLOCK_SIZE) + crypto_aead_chacha20poly1305_IETF_ABYTES];
     unsigned long long decrypted_len;
+    unsigned char nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+    extern unsigned char key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
 
     if (file)
     {
         fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
-        fread(nonce, sizeof(nonce), 1, file); // Read nonce first
-        fread(encrypted_data, BLOCK_SIZE, 1, file);
+        fread(nonce, sizeof(nonce), 1, file);
+        fread(encrypted_data, sizeof(encrypted_data), 1, file);
         fclose(file);
+
         extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, BLOCK_SIZE, nonce, key);
+        if (decrypt_data(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
+        {
+            printf("Decryption failed for block %d in volume %s\n", block_index, volume_id);
+            return;
+        }
     }
     else
     {
-        // Handle error: volume file not found
+        perror("Failed to open volume file for reading");
     }
 
     printf("Reading block %d from volume %s\n", block_index, volume_id);
@@ -144,22 +150,28 @@ void read_volume_block(char *volume_id, int block_index, void *buf)
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "rb");
-    unsigned char encrypted_data[BLOCK_SIZE];
-    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    unsigned char encrypted_data[sizeof(BLOCK_SIZE) + crypto_aead_chacha20poly1305_IETF_ABYTES];
     unsigned long long decrypted_len;
+    unsigned char nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+    extern unsigned char key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
 
     if (file)
     {
         fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
-        fread(nonce, sizeof(nonce), 1, file); // Read nonce first
-        fread(encrypted_data, BLOCK_SIZE, 1, file);
+        fread(nonce, sizeof(nonce), 1, file);
+        fread(encrypted_data, sizeof(encrypted_data), 1, file);
         fclose(file);
+
         extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, BLOCK_SIZE, nonce, key);
+        if (decrypt_data(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
+        {
+            printf("Decryption failed for block %d in volume %s\n", block_index, volume_id);
+            return;
+        }
     }
     else
     {
-        // Handle error: volume file not found
+        perror("Failed to open volume file for reading");
     }
 
     printf("Reading block %d from volume %s\n", block_index, volume_id);
@@ -175,37 +187,35 @@ void write_volume_block(char *volume_id, int block_index, const void *buf)
 {
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
-    FILE *file = fopen(volume_filename, "r+b"); // Open for reading and writing; binary mode
-    unsigned char encrypted_data[BLOCK_SIZE];
-    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    FILE *file = fopen(volume_filename, "r+b");
+    unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_chacha20poly1305_IETF_ABYTES];
     unsigned long long ciphertext_len;
-
-    generate_nonce(nonce); // Generate nonce
-
+    unsigned char nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+    extern unsigned char key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
+    randombytes_buf(nonce, sizeof(nonce));
     if (file)
     {
+
         fseek(file, block_index * (BLOCK_SIZE + sizeof(nonce)), SEEK_SET);
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        fwrite(nonce, sizeof(nonce), 1, file); // Write nonce first
-        encrypt_aes_gcm(encrypted_data, &ciphertext_len, buf, BLOCK_SIZE, nonce, key);
-        fwrite(encrypted_data, BLOCK_SIZE, 1, file);
+        if (encrypt_data(encrypted_data, &ciphertext_len, buf, BLOCK_SIZE, nonce, key) != 0)
+        {
+            printf("Encryption failed for block %d in volume %s\n", block_index, volume_id);
+            fclose(file);
+            return;
+        }
+        fwrite(nonce, sizeof(nonce), 1, file);
+        fwrite(encrypted_data, ciphertext_len, 1, file);
         fclose(file);
     }
     else
     {
-        // Handle error: volume file not found or unable to write
+        perror("Failed to open volume file for writing or unable to write");
     }
 
-    // read the whole block from the volume to update the merkle tree
     char block_data[BLOCK_SIZE];
-
     read_volume_block_no_check(volume_id, block_index, block_data);
-
-    //  TODO: Read before updating the block
-
     update_merkle_node_for_block(volume_id, block_index, block_data);
 }
-
 // Function to initialize a new superblock
 void init_superblock_local(superblock_t *sb)
 {

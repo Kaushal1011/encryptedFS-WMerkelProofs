@@ -6,25 +6,23 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <sys/stat.h>
-// Read an inode from file
 void read_inode(char *volume_id, int inode_index, inode *inode_buf)
 {
-
     printf("Reading inode %d\n", inode_index);
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
     FILE *file = fopen(inode_filename, "rb");
     if (file)
     {
-        unsigned char encrypted_data[sizeof(inode) + crypto_aead_aes256gcm_ABYTES];
+        unsigned char encrypted_data[sizeof(inode) + crypto_aead_chacha20poly1305_IETF_ABYTES];
         unsigned long long decrypted_len;
-        unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
+        unsigned char nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+        extern unsigned char key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
+        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_chacha20poly1305_IETF_ABYTES), SEEK_SET);
         fread(nonce, sizeof(nonce), 1, file);
         fread(encrypted_data, sizeof(encrypted_data), 1, file);
 
-        if (decrypt_aes_gcm((unsigned char *)inode_buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
+        if (decrypt_data((unsigned char *)inode_buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
         {
             perror("Failed to decrypt inode");
             fclose(file);
@@ -39,39 +37,28 @@ void read_inode(char *volume_id, int inode_index, inode *inode_buf)
     }
 }
 
-// Write an inode to file
 void write_inode(char *volume_id, int inode_index, const inode *inode_buf)
 {
     printf("Writing inode %d\n", inode_index);
-
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
-
-    printf("Writing inode %d\n", inode_index);
-    printf("Writing inode %s\n", inode_filename);
     FILE *file = fopen(inode_filename, "r+b");
     if (file)
     {
-        unsigned char encrypted_data[sizeof(inode) + crypto_aead_aes256gcm_ABYTES];
+        unsigned char encrypted_data[sizeof(inode) + crypto_aead_chacha20poly1305_IETF_ABYTES];
         unsigned long long ciphertext_len;
-        unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
+        unsigned char nonce[crypto_aead_chacha20poly1305_IETF_NPUBBYTES];
+        extern unsigned char key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
 
-        printf("key %s\n", key);
-
-        generate_nonce(nonce);
-        int retFlag = encrypt_aes_gcm(encrypted_data, &ciphertext_len, (unsigned char *)inode_buf, sizeof(inode), nonce, key);
-
-        printf("retFlag %d\n", retFlag);
-
-        if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, (unsigned char *)inode_buf, sizeof(inode), nonce, key) != 0)
+        randombytes_buf(nonce, sizeof(nonce)); // libsodium random nonce generation
+        if (encrypt_data(encrypted_data, &ciphertext_len, (unsigned char *)inode_buf, sizeof(inode), nonce, key) != 0)
         {
             perror("Failed to encrypt inode");
             fclose(file);
             return;
         }
 
-        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
+        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_chacha20poly1305_IETF_ABYTES), SEEK_SET);
         fwrite(nonce, sizeof(nonce), 1, file);
         fwrite(encrypted_data, ciphertext_len, 1, file);
         fclose(file);

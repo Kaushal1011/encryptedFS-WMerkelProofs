@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <linux/stat.h>
 #include <math.h>
+#include <sodium.h>
 
 #include "bitmap.h"
 #include "fs_operations.h"
