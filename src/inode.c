@@ -1,4 +1,5 @@
 #include "inode.h"
+#include "crypto.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
