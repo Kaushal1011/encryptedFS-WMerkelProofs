@@ -10,8 +10,10 @@
 #include "fs_operations.h"
 #include "volume.h"
 
+// function pointer type def for allocation functions
 typedef int (*alloc_func)(bitmap_t *bmp, char *volume_id);
 
+// Find the index of a free inode/datablock in the file system
 int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc_func funcPoint)
 {
     char volume_id_new[9];
@@ -90,9 +92,6 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     (void)fi; // The fuse_file_info is not used in this simple example
 
-    // Assuming a global or externally accessible superblock `sb` and volume ID `volume_id`
-    // extern superblock_t sb;
-    // right now kept zero but read it from the superblock
     char volume_id[9] = "0";
 
     // Load the current bitmap to find a free inode
@@ -108,7 +107,6 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     if (inode_index == -1)
     {
-        // TODO: volume is full, check for other volumes
         return -ENOSPC; // No space left for new inode
     }
 
@@ -131,7 +129,6 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     }
     else
     {
-        // TODO: handle the case where the root directory is full
         return -ENOSPC; // No space left
     }
 
@@ -142,13 +139,10 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
 {
     printf("read\n");
 
-    (void)fi; // Unused in this simplified example, but can be used for caching inode index etc.
+    (void)fi;
 
     inode file_inode;
-    int inode_index = find_inode_index_by_path(path); // Implement this function to find inode by path
-
-    // find inode index by path should automatically check for all volumes
-    // it is based on the assumption that root children has proper inode ids
+    int inode_index = find_inode_index_by_path(path);
 
     if (inode_index < 0)
     {
@@ -197,9 +191,9 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 {
     printf("write\n");
 
-    (void)fi; // Unused in this example
+    (void)fi;
 
-    char volume_id[9] = "0"; // Assuming single volume setup
+    char volume_id[9] = "0"; // managed by later functions
     bitmap_t bmp;
     read_bitmap(volume_id, &bmp);
 
@@ -229,7 +223,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 
         if (block_index >= file_inode.num_datablocks)
         {
-            // Allocate a new block
+            // Allocate a new block, if volume_id is not enough for new block, allocate new volume
             int new_block_index = manage_volume_allocation(&sb, volume_id_datablocks, &bmp, allocate_data_block);
 
             printf("new_block_index: %d\n", new_block_index);
@@ -240,6 +234,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
             if (new_block_index == -1)
                 return -ENOSPC; // No space left
 
+            // datablock index is stored as volume_id * DATA_BLOCKS_PER_VOLUME + block_index it is handled in write and read functions
             file_inode.datablocks[block_index] = new_block_index + DATA_BLOCKS_PER_VOLUME * atoi(volume_id_datablocks);
             file_inode.num_datablocks += 1;
         }
@@ -276,7 +271,7 @@ int fs_truncate(const char *path, off_t newsize)
 {
     printf("truncate\n");
 
-    char volume_id[9] = "0"; // Assuming single volume setup for simplicity
+    char volume_id[9] = "0";
     int inode_index = find_inode_index_by_path(path);
 
     //  supposed to work for all volumes
@@ -294,14 +289,7 @@ int fs_truncate(const char *path, off_t newsize)
         return -EISDIR; // Cannot truncate a directory
     }
 
-    //  does shrinking and expanding this will be very tough to implement across volumes because of loading bmps
-    //  for datablocks and volume ids
-    //  case of expanding should be same as implemented for write
-
     bitmap_t bmp;
-    // determine volume_id based on file_inode.datablocks[block_index]
-
-    // Handling shrinking of the file
     if (newsize < file_inode.size)
     {
         // Calculate the number of blocks needed after truncation
@@ -365,7 +353,7 @@ int fs_getattr(const char *path, struct stat *stbuf)
     if (!node.valid)
         return -ENOENT;
 
-    stbuf->st_ino = inode_index; // Important for some operations to avoid confusion
+    stbuf->st_ino = inode_index;
     stbuf->st_mode = node.permissions | (node.is_directory ? S_IFDIR : S_IFREG);
     stbuf->st_nlink = node.num_links;
     stbuf->st_uid = node.user_id;
@@ -395,10 +383,6 @@ int fs_open(const char *path, struct fuse_file_info *fi)
     // Check if directory (directories cannot be opened)
     if (file_inode.is_directory)
         return -EISDIR;
-
-    //  not handling file open modes and permissions.
-    // real application,  would check `fi->flags` here and compare them with
-    // the file's permissions to decide whether to allow the open operation.
 
     return 0;
 }

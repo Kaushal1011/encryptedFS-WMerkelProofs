@@ -107,6 +107,8 @@ int load_key(unsigned char *key, const char *filename)
     return 0;
 }
 
+// Can be used by future support for ChaCha20-Poly1305
+// was added to check the compatibility of the CPU
 // Encryption using libsodium (ChaCha20-Poly1305)
 int encrypt_data(unsigned char *ciphertext, unsigned long long *ciphertext_len,
                  const unsigned char *plaintext, unsigned long long plaintext_len,
@@ -122,6 +124,8 @@ int encrypt_data(unsigned char *ciphertext, unsigned long long *ciphertext_len,
     return 0;
 }
 
+// Can be used by future support for ChaCha20-Poly1305
+// was added to check the compatibility of the CPU
 // Decryption using libsodium (ChaCha20-Poly1305)
 int decrypt_data(unsigned char *decrypted, unsigned long long *decrypted_len,
                  const unsigned char *ciphertext, unsigned long long ciphertext_len,

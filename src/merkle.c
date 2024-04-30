@@ -29,13 +29,14 @@ MerkleNode *create_merkle_node(const char *hash, MerkleNode *left, MerkleNode *r
         node->right = right;
         node->parent = NULL;
         node->block_index = block_index;
-        // Set min and max indices
+        // Set min and max indices, helps when searching for a leaf node
         node->min_index = (left ? left->min_index : block_index);
         node->max_index = (right ? right->max_index : block_index);
     }
     return node;
 }
 
+// Compute the SHA-256 hash of the input string
 void compute_hash(const char *input, char *output)
 {
     unsigned char temp_hash[SHA256_DIGEST_LENGTH];
@@ -43,11 +44,13 @@ void compute_hash(const char *input, char *output)
     hash_to_hex(temp_hash, output, SHA256_DIGEST_LENGTH); // Convert binary hash to hex string
 }
 
+// Compare two hashes for equality
 bool compare_hashes(const char *hash1, const char *hash2)
 {
     return strcmp(hash1, hash2) == 0; // Use strcmp for string comparison
 }
 
+// Update the hash of a Merkle node and propagate the change up the tree
 void update_merkle_node(MerkleNode *node, const char *new_hash)
 {
     strcpy(node->hash, new_hash); // Update the node's hash directly with new hash
@@ -70,6 +73,8 @@ void update_merkle_node(MerkleNode *node, const char *new_hash)
     }
 }
 
+// Build a Merkle tree from an array of block hashes
+// used to build merkle tree when initializing a volume
 MerkleTree *build_merkle_tree(char **block_hashes, int num_blocks)
 {
     printf("Building merkle tree\n");
@@ -131,6 +136,7 @@ MerkleTree *build_merkle_tree(char **block_hashes, int num_blocks)
     return tree;
 }
 
+// Verify the Merkle path from a leaf node to the root
 bool verify_merkle_path(MerkleNode *leaf_node, const char *expected_root_hash, char decrypted_hash[65])
 {
     printf("Verifying merkle path\n");

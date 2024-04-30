@@ -323,7 +323,7 @@ void init_superblock_local(superblock_t *sb)
 {
     sb->volume_count = 1; // Start with one volume
     sb->block_size = BLOCK_SIZE;
-    sb->inode_size = INODE_SIZE;
+    sb->inode_size = sizeof(inode);
     // Initialize first volume (Example paths, modify as needed)
     strcpy(sb->volumes[0].inodes_path, "./inodes_0.bin");
     strcpy(sb->volumes[0].bitmap_path, "./bmp_0.bin");
@@ -339,7 +339,7 @@ void init_superblock_remote(superblock_t *sb)
 {
     sb->volume_count = 1; // Start with one volume
     sb->block_size = BLOCK_SIZE;
-    sb->inode_size = INODE_SIZE;
+    sb->inode_size = sizeof(inode);
     // Initialize first volume (Example paths, modify as needed)
     strcpy(sb->volumes[0].inodes_path, "https://example.com/inodes_0.bin");
     strcpy(sb->volumes[0].bitmap_path, "https://example.com/bmp_0.bin");

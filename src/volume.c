@@ -37,7 +37,7 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
         }
         sb->volume_count = 1;
         sb->block_size = BLOCK_SIZE;
-        sb->inode_size = INODE_SIZE;
+        sb->inode_size = sizeof(inode);
         create_volume_files_local(0, sb);
         // Create the root directory inode
         inode root_inode;
@@ -211,7 +211,7 @@ void init_superblock_local(superblock_t *sb)
 {
     sb->volume_count = 1; // Start with one volume
     sb->block_size = BLOCK_SIZE;
-    sb->inode_size = INODE_SIZE;
+    sb->inode_size = sizeof(inode);
     // Initialize first volume (Example paths, modify as needed)
     strcpy(sb->volumes[0].inodes_path, "./inodes_0.bin");
     strcpy(sb->volumes[0].bitmap_path, "./bmp_0.bin");

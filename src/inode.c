@@ -9,6 +9,8 @@
 // Read an inode from file
 void read_inode(int inode_index, inode *inode_buf)
 {
+    // if inode index is greater than the total number of inodes,
+    //  we handle it to read the inode from the next volume
     printf("Reading inode %d\n", inode_index);
     char volume_id[9] = "0";
 
@@ -49,6 +51,9 @@ void read_inode(int inode_index, inode *inode_buf)
 // Write an inode to file
 void write_inode(int inode_index, const inode *inode_buf)
 {
+    // if inode index is greater than the total number of inodes,
+    //  we handle it to write the inode to the next volume
+
     printf("Writing inode %d\n", inode_index);
     char volume_id[9] = "0";
 

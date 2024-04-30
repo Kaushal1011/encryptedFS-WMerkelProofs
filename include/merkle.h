@@ -4,11 +4,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-// Define constants such as BLOCK_SIZE if not already defined
-#ifndef BLOCK_SIZE
-#define BLOCK_SIZE 4096 // Default block size
-#endif
-
 // Define the SHA256 digest length if not defined
 #ifndef SHA256_DIGEST_LENGTH
 #define SHA256_DIGEST_LENGTH 32

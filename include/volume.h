@@ -7,35 +7,35 @@
 
 typedef enum volume_type
 {
-    LOCAL,
-    AWS,
-    GDRIVE,
-    FTP
+    LOCAL,  // Local volume (on the same machine as the file system)
+    AWS,    // AWS S3 volume (remote volume) - Not implemented
+    GDRIVE, // Google Drive volume (remote volume) - In Progress
+    FTP     // FTP SERVER volume (remote volume) - Not implemented
 } volume_type;
 
 typedef struct volume_info
 {
-    char inodes_path[MAX_PATH_LENGTH];
-    char bitmap_path[MAX_PATH_LENGTH];
-    char volume_path[MAX_PATH_LENGTH];
-    char merkle_path[MAX_PATH_LENGTH];
-    int inodes_count;
-    int blocks_count;
-    MerkleTree *merkle_tree; // Pointer to the Merkle tree of this volume
+    char inodes_path[MAX_PATH_LENGTH]; // Path to the file storing the inodes
+    char bitmap_path[MAX_PATH_LENGTH]; // Path to the file storing the bitmap
+    char volume_path[MAX_PATH_LENGTH]; // Path to the file storing the volume data
+    char merkle_path[MAX_PATH_LENGTH]; // Path to the file storing the Merkle tree
+    int inodes_count;                  // Number of inodes in the volume
+    int blocks_count;                  // Number of data blocks in the volume
+    MerkleTree *merkle_tree;           // Pointer to the Merkle tree of this volume
 } volume_info_t;
 
 typedef struct superblock
 {
-    int volume_count;
-    int block_size;
-    int inode_size;
-    volume_type vtype;
-    volume_info_t volumes[NUMVOLUMES]; // Assume a maximum of 10 volumes
+    int volume_count;                  // Number of volumes
+    int block_size;                    // Size of a block in bytes
+    int inode_size;                    // Size of an inode in bytes
+    volume_type vtype;                 // Type of volume
+    volume_info_t volumes[NUMVOLUMES]; // Array of volume_info_t structures, Maximum defined in constants
 } superblock_t;
 
-extern superblock_t sb;
+extern superblock_t sb; // Global superblock for the file system mounted
 
-extern char superblock_path[MAX_PATH_LENGTH];
+extern char superblock_path[MAX_PATH_LENGTH]; // Path to the file storing the superblock
 
 // Function prototypes for volume operations
 void init_volume(volume_info_t *volume, const char *path, volume_type type, int i);

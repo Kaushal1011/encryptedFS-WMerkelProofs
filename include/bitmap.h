@@ -5,7 +5,7 @@
 
 #include "constants.h"
 
-// Define the bitmap struct
+// bitmap struct to store the bitmap for inode and data block availability
 typedef struct bitmap
 {
     char inode_bmp[4096];     // Bitmap for inode availability
