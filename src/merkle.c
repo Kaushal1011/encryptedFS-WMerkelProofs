@@ -453,7 +453,7 @@ void get_root_hash(char *volume_id, char *root_hash)
 //  take decrypted block hash as functiton param
 bool verify_block_integrity(int block_index)
 {
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
 

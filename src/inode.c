@@ -10,7 +10,7 @@
 void read_inode(int inode_index, inode *inode_buf)
 {
     printf("Reading inode %d\n", inode_index);
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
 
     int volume_id_int = inode_index / INODES_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
@@ -50,7 +50,7 @@ void read_inode(int inode_index, inode *inode_buf)
 void write_inode(int inode_index, const inode *inode_buf)
 {
     printf("Writing inode %d\n", inode_index);
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
 
     int volume_id_int = inode_index / INODES_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);

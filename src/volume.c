@@ -106,7 +106,7 @@ void create_volume_files_local(int i, superblock_t *sb)
 
 void read_volume_block_no_check(int block_index, void *buf)
 {
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
 
@@ -139,7 +139,7 @@ void read_volume_block_no_check(int block_index, void *buf)
 
 void read_volume_block(int block_index, void *buf)
 {
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
 
@@ -155,7 +155,7 @@ void write_volume_block(int block_index, const void *buf, size_t buf_size)
 {
     printf("Writing block %d\n", block_index);
 
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
 

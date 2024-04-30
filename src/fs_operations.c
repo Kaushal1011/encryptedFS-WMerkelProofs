@@ -14,7 +14,7 @@ typedef int (*alloc_func)(bitmap_t *bmp, char *volume_id);
 
 int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc_func funcPoint)
 {
-    char volume_id_new[2];
+    char volume_id_new[9];
     strcpy(volume_id_new, volume_id); // Copy current volume_id to volume_id_new
     int inode_index = funcPoint(bmp, volume_id_new);
     int volume_num = atoi(volume_id_new) + 1;
@@ -28,7 +28,7 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
 
         printf("volume_num: %d\n", volume_num);
 
-        if (volume_num == 9)
+        if (volume_num == NUMVOLUMES - 1)
         {
             return -1; // No space left for new inode
         }
@@ -93,7 +93,7 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     // Assuming a global or externally accessible superblock `sb` and volume ID `volume_id`
     // extern superblock_t sb;
     // right now kept zero but read it from the superblock
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
 
     // Load the current bitmap to find a free inode
     bitmap_t bmp;
@@ -199,7 +199,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 
     (void)fi; // Unused in this example
 
-    char volume_id[2] = "0"; // Assuming single volume setup
+    char volume_id[9] = "0"; // Assuming single volume setup
     bitmap_t bmp;
     read_bitmap(volume_id, &bmp);
 
@@ -218,7 +218,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     size_t bytes_written = 0;
     off_t pos = offset;
 
-    char volume_id_datablocks[2] = "0";
+    char volume_id_datablocks[9] = "0";
     while (bytes_written < size)
     {
         int block_index = pos / BLOCK_SIZE;
@@ -276,7 +276,7 @@ int fs_truncate(const char *path, off_t newsize)
 {
     printf("truncate\n");
 
-    char volume_id[2] = "0"; // Assuming single volume setup for simplicity
+    char volume_id[9] = "0"; // Assuming single volume setup for simplicity
     int inode_index = find_inode_index_by_path(path);
 
     //  supposed to work for all volumes
@@ -310,7 +310,7 @@ int fs_truncate(const char *path, off_t newsize)
         for (int i = new_blocks_needed; i < file_inode.num_datablocks; i++)
         {
             //  determine volume_id based on file_inode.datablocks[block_index]
-            char volume_id_datablocks[2] = "0";
+            char volume_id_datablocks[9] = "0";
             int volume_index = file_inode.datablocks[i] / DATA_BLOCKS_PER_VOLUME;
             sprintf(volume_id_datablocks, "%d", volume_index);
             read_bitmap(volume_id_datablocks, &bmp);
@@ -502,7 +502,7 @@ int fs_unlink(const char *path)
     // also clear data blocks for the deleted inode in volume handled setup
     printf("unlink\n");
 
-    char volume_id[2] = "0";
+    char volume_id[9] = "0";
 
     // Find inode index for the path
     int inode_index = find_inode_index_by_path(path);
@@ -522,7 +522,7 @@ int fs_unlink(const char *path)
     {
         //  determine volume_id based on file_inode.datablocks[block_index]
         int volume_index = target_inode.datablocks[i] / DATA_BLOCKS_PER_VOLUME;
-        char volume_id_datablocks[2] = "0";
+        char volume_id_datablocks[9] = "0";
         sprintf(volume_id_datablocks, "%d", volume_index);
         read_bitmap(volume_id_datablocks, &bmp);
         clear_bit(bmp.datablock_bmp, target_inode.datablocks[i] % DATA_BLOCKS_PER_VOLUME);

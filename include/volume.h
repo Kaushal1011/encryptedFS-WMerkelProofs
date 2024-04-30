@@ -30,7 +30,7 @@ typedef struct superblock
     int block_size;
     int inode_size;
     volume_type vtype;
-    volume_info_t volumes[10]; // Assume a maximum of 10 volumes
+    volume_info_t volumes[NUMVOLUMES]; // Assume a maximum of 10 volumes
 } superblock_t;
 
 extern superblock_t sb;

@@ -14,7 +14,7 @@
 #define ENCRYPTION_KEY_SIZE 32 // AES-256
 #define AES_GCM_NONCE_SIZE 12
 #define AES_GCM_TAG_SIZE 16
-
+#define NUMVOLUMES 10
 // Utility macro to get the minimum of two values
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
