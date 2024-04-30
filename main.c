@@ -59,8 +59,10 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    extern char superblock_path[MAX_PATH_LENGTH];
+
     // The superblock path is provided as the last argument for simplicity
-    char *superblock_path = argv[argc - 1];
+    strcpy(superblock_path, argv[argc - 1]);
 
     // Modify the argument list to remove the superblock path
     argc--;

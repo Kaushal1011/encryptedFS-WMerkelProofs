@@ -10,6 +10,8 @@
 
 superblock_t sb;
 
+char superblock_path[MAX_PATH_LENGTH];
+
 // Initialize a volume with default paths and settings
 void init_volume(volume_info_t *volume, const char *path, volume_type type, int volume_id)
 {
@@ -37,13 +39,10 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
         sb->block_size = BLOCK_SIZE;
         sb->inode_size = INODE_SIZE;
         create_volume_files_local(0, sb);
-        create_volume_files_local(0, sb);
-        // Create the root directory inode
-        create_volume_files_local(0, sb);
         // Create the root directory inode
         inode root_inode;
         init_inode(&root_inode, "/", S_IFDIR | 0777);
-        write_inode("0", 0, &root_inode);
+        write_inode(0, &root_inode);
         bitmap_t root_bmp;
         memset(&root_bmp, 0, sizeof(root_bmp));
         set_bit(root_bmp.inode_bmp, 0);
@@ -105,24 +104,31 @@ void create_volume_files_local(int i, superblock_t *sb)
     }
 }
 
-void read_volume_block_no_check(char *volume_id, int block_index, void *buf)
+void read_volume_block_no_check(int block_index, void *buf)
 {
+    char volume_id[2] = "0";
+    int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
+    sprintf(volume_id, "%d", volume_id_int);
+
+    int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
+
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
     FILE *file = fopen(volume_filename, "rb");
+
     unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES];
     unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
     unsigned long long decrypted_len;
 
     if (file)
     {
-        fseek(file, block_index * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
+        fseek(file, block_index_in_volume * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
         fread(nonce, sizeof(nonce), 1, file);
         fread(encrypted_data, sizeof(encrypted_data), 1, file);
         fclose(file);
         if (decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
         {
-            printf("Decryption failed for block %d in volume %s\n", block_index, volume_id);
+            printf("Decryption failed for block %d in volume %s\n", block_index_in_volume, volume_id);
         }
     }
     else
@@ -131,39 +137,28 @@ void read_volume_block_no_check(char *volume_id, int block_index, void *buf)
     }
 }
 
-void read_volume_block(char *volume_id, int block_index, void *buf)
+void read_volume_block(int block_index, void *buf)
 {
-    char volume_filename[256];
-    sprintf(volume_filename, "volume_%s.bin", volume_id);
-    FILE *file = fopen(volume_filename, "rb");
-    unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES];
-    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
-    unsigned long long decrypted_len;
+    char volume_id[2] = "0";
+    int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
+    sprintf(volume_id, "%d", volume_id_int);
 
-    if (file)
-    {
-        fseek(file, block_index * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
-        fread(nonce, sizeof(nonce), 1, file);
-        fread(encrypted_data, sizeof(encrypted_data), 1, file);
-        fclose(file);
-        if (decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
-        {
-            printf("Decryption failed for block %d in volume %s\n", block_index, volume_id);
-        }
-    }
-    else
-    {
-        printf("Error: File %s not found.\n", volume_filename);
-    }
+    read_volume_block_no_check(block_index, buf);
 
-    if (!verify_block_integrity(volume_id, block_index))
+    if (!verify_block_integrity(block_index))
     {
         printf("Integrity check failed for block %d in volume %s\n", block_index, volume_id);
     }
 }
 
-void write_volume_block(char *volume_id, int block_index, const void *buf, size_t buf_size)
+void write_volume_block(int block_index, const void *buf, size_t buf_size)
 {
+    char volume_id[2] = "0";
+    int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
+    sprintf(volume_id, "%d", volume_id_int);
+
+    int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
+
     char volume_filename[256];
     unsigned char block_buffer[BLOCK_SIZE];
     unsigned char encrypted_data[BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES];
@@ -191,11 +186,11 @@ void write_volume_block(char *volume_id, int block_index, const void *buf, size_
 
     if (file)
     {
-        fseek(file, block_index * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
+        fseek(file, block_index_in_volume * (BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES + sizeof(nonce)), SEEK_SET);
         fwrite(nonce, sizeof(nonce), 1, file);
         if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, block_buffer, BLOCK_SIZE, nonce, key) != 0)
         {
-            printf("Encryption failed for block %d in volume %s\n", block_index, volume_id);
+            printf("Encryption failed for block %d in volume %s\n", block_index_in_volume, volume_id);
         }
         fwrite(encrypted_data, BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES, 1, file);
         fclose(file);
@@ -205,7 +200,7 @@ void write_volume_block(char *volume_id, int block_index, const void *buf, size_
         printf("Error: Unable to write to file %s.\n", volume_filename);
     }
 
-    update_merkle_node_for_block(volume_id, block_index, block_buffer);
+    update_merkle_node_for_block(volume_id, block_index_in_volume, block_buffer);
 }
 // Function to initialize a new superblock
 void init_superblock_local(superblock_t *sb)

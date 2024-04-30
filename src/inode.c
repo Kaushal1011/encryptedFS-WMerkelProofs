@@ -7,10 +7,17 @@
 #include <unistd.h>
 #include <sys/stat.h>
 // Read an inode from file
-void read_inode(char *volume_id, int inode_index, inode *inode_buf)
+void read_inode(int inode_index, inode *inode_buf)
 {
-
     printf("Reading inode %d\n", inode_index);
+    char volume_id[2] = "0";
+
+    int volume_id_int = inode_index / INODES_PER_VOLUME;
+    sprintf(volume_id, "%d", volume_id_int);
+
+    int inode_index_in_volume = inode_index % INODES_PER_VOLUME;
+
+    printf("Reading inode %d\n", inode_index_in_volume);
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
     FILE *file = fopen(inode_filename, "rb");
@@ -20,7 +27,7 @@ void read_inode(char *volume_id, int inode_index, inode *inode_buf)
         unsigned long long decrypted_len;
         unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
         extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
+        fseek(file, inode_index_in_volume * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
         fread(nonce, sizeof(nonce), 1, file);
         fread(encrypted_data, sizeof(encrypted_data), 1, file);
 
@@ -40,14 +47,22 @@ void read_inode(char *volume_id, int inode_index, inode *inode_buf)
 }
 
 // Write an inode to file
-void write_inode(char *volume_id, int inode_index, const inode *inode_buf)
+void write_inode(int inode_index, const inode *inode_buf)
 {
     printf("Writing inode %d\n", inode_index);
+    char volume_id[2] = "0";
+
+    int volume_id_int = inode_index / INODES_PER_VOLUME;
+    sprintf(volume_id, "%d", volume_id_int);
+
+    int inode_index_in_volume = inode_index % INODES_PER_VOLUME;
+
+    printf("Writing inode %d\n", inode_index_in_volume);
 
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
 
-    printf("Writing inode %d\n", inode_index);
+    printf("Writing inode %d\n", inode_index_in_volume);
     printf("Writing inode %s\n", inode_filename);
     FILE *file = fopen(inode_filename, "r+b");
     if (file)
@@ -71,7 +86,7 @@ void write_inode(char *volume_id, int inode_index, const inode *inode_buf)
             return;
         }
 
-        fseek(file, inode_index * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
+        fseek(file, inode_index_in_volume * (sizeof(inode) + sizeof(nonce) + crypto_aead_aes256gcm_ABYTES), SEEK_SET);
         fwrite(nonce, sizeof(nonce), 1, file);
         fwrite(encrypted_data, ciphertext_len, 1, file);
         fclose(file);
@@ -155,30 +170,17 @@ int allocate_inode_bmp(bitmap_t *bmp, char *volume_id)
 }
 
 // temporary implementation
-int find_inode_index_by_path(char *volume_id, const char *target_path)
+int find_inode_index_by_path(const char *target_path)
 {
-    char inode_filename[256];
-    sprintf(inode_filename, "inodes_%s.bin", volume_id);
-
-    FILE *file = fopen(inode_filename, "rb");
-
-    if (!file)
-    {
-        printf("inodes file can not be opened\n");
-        // Inode file could not be opened; handle error appropriately.
-        return -1;
-    }
 
     inode root;
     // read the root inode
-    read_inode("0", 0, &root);
+    read_inode(0, &root);
 
     // check if the root inode is the target
     if (strcmp(root.path, target_path) == 0)
     {
         printf("Root inode is the target %s %s \n", root.path, target_path);
-
-        fclose(file);
         return 0;
     }
 
@@ -186,14 +188,12 @@ int find_inode_index_by_path(char *volume_id, const char *target_path)
 
     for (int i = 0; i < root.num_children; i++)
     {
-        read_inode(volume_id, root.children[i], &temp_inode);
+        read_inode(root.children[i], &temp_inode);
         if (strcmp(temp_inode.path, target_path) == 0)
         {
-            fclose(file);
             return root.children[i];
         }
     }
 
-    fclose(file);
     return -1; // Target path not found
 }

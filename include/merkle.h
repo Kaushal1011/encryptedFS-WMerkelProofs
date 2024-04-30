@@ -45,7 +45,7 @@ MerkleTree *load_merkle_tree_from_file(const char *file_path);
 
 // Block management related functions
 int get_number_of_blocks(char *volume_path);
-void get_block_hash(char *volume_path, int block_index, char *hash);
+void get_block_hash(int block_index, char *hash);
 void generate_random_hash(char *hash, size_t size);
 
 // Merkle tree volume operations
@@ -55,6 +55,6 @@ MerkleNode *find_leaf_node(MerkleNode *node, int block_index);
 MerkleNode *find_leaf_node_in_tree(MerkleTree *tree, int block_index);
 void update_merkle_node_for_block(char *volume_id, int block_index, const void *block_data);
 void get_root_hash(char *volume_id, char *root_hash);
-bool verify_block_integrity(char *volume_id, int block_index);
+bool verify_block_integrity(int block_index);
 
 #endif // MERKLE_H

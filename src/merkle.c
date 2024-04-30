@@ -175,12 +175,12 @@ int get_number_of_blocks(char *volume_path)
 }
 
 // this function will have to decrypt the block and then compute the hash
-void get_block_hash(char *volume_path, int block_index, char *hash)
+void get_block_hash(int block_index, char *hash)
 {
     printf("Getting block hash\n");
 
     char block_data[BLOCK_SIZE];
-    read_volume_block_no_check(volume_path, block_index, block_data);
+    read_volume_block_no_check(block_index, block_data);
     compute_hash(block_data, hash);
     printf("Block Hash: %s\n", hash);
 }
@@ -452,11 +452,17 @@ void get_root_hash(char *volume_id, char *root_hash)
 }
 
 //  take decrypted block hash as functiton param
-bool verify_block_integrity(char *volume_id, int block_index)
+bool verify_block_integrity(int block_index)
 {
+    char volume_id[2] = "0";
+    int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
+    sprintf(volume_id, "%d", volume_id_int);
+
+    int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
+
     printf("Verifying block integrity\n");
     MerkleTree *tree = get_merkle_tree_for_volume(volume_id);
-    MerkleNode *leaf_node = find_leaf_node_in_tree(tree, block_index);
+    MerkleNode *leaf_node = find_leaf_node_in_tree(tree, block_index_in_volume);
     printf("Leaf node found: %s\n", leaf_node->hash);
     printf("Leaf node block index %d\n", leaf_node->block_index);
     char expected_root_hash[65];
@@ -467,7 +473,7 @@ bool verify_block_integrity(char *volume_id, int block_index)
     // read the hash from the block
     char decrypted_hash[65];
 
-    get_block_hash(volume_id, block_index, decrypted_hash);
+    get_block_hash(block_index, decrypted_hash);
 
     printf("Decrypted hash: %s\n", decrypted_hash);
     printf("Leaf node: %s\n", leaf_node->hash);
