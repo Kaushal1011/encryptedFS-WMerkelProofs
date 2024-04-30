@@ -20,7 +20,7 @@ or
 ./encryptFS.out keygen key.txt
 ```
 
-when key is not provided, the program will generate a random key and store it in key.txt (dont forget to save it somewhere safe)
+when key is not provided, the program will error. generate key store it in key.txt (dont forget to save it somewhere safe)
 
 # Clean up 
 
