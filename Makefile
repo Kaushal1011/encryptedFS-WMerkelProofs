@@ -9,41 +9,24 @@ opflag := -o encryptFS.out
 
 .PHONY: all run drun bgrun compile dcompile checkdir dmkfs mkfs_dcompile mkfs mkfs_compile cleanup
 
-all: compile cleanup
+all: compile 
 
 clean:
 	-rm -f encryptFS.out 
 	-rm -rf *.bin
-
-run: compile cleanup
-	$(opflag) -f $(mountpoint) /home/$(username)/file.txt
-
-drun: dcompile cleanup
-	$(opflag) -d -f -s $(mountpoint) /home/$(username)/file.txt
-
+keygen:
+	./encryptFS.out keygen ./key.txt
+run: 
+	./encryptFS.out -f $(mountpoint) ./superblock.bin ./key.txt
+drun: 
+	./encryptFS.out -d -f -s $(mountpoint) ./superblock.bin ./key.txt
 bgrun: compile
-	$(opflag) $(mountpoint)
-
+	./encryptFS.out $(mountpoint)
 compile: checkdir
 	gcc $(cflags) $(files) $(opflag) $(ldflags)
-
 dcompile: checkdir
 	gcc $(cflags) -g -DERR_FLAG $(files) $(opflag) $(ldflags)
-
 checkdir:
 	@[ -d "$(mountpoint)" ] || mkdir -p $(mountpoint)
-
-dmkfs: mkfs_dcompile
-	./main /home/$(username)/file.txt
-
-mkfs_dcompile: checkdir
-	gcc $(cflags) -g -DERR_FLAG $(files) -o main $(ldflags)
-
-mkfs: mkfs_compile
-	./main /home/$(username)/file.txt
-
-mkfs_compile: checkdir
-	gcc $(cflags) $(files) -o main $(ldflags)
-
-# cleanup:
-# 	-fusermount -u $(mountpoint) > /dev/null 2>&1
+unmount:
+	fusermount -u $(mountpoint)

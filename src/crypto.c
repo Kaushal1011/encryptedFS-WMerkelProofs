@@ -63,7 +63,7 @@ void generate_and_store_key(const char *filename)
     sodium_bin2base64(b64_key, sizeof(b64_key), key, sizeof(key), sodium_base64_VARIANT_ORIGINAL);
 
     // Store the Base64-encoded key in a specified file
-    FILE *key_file = fopen(filename, "w");
+    FILE *key_file = fopen(filename, "w+");
     if (key_file == NULL)
     {
         perror("Failed to open file");
@@ -78,6 +78,8 @@ void generate_and_store_key(const char *filename)
 // Function to load and decode the key from a specified filename
 int load_key(unsigned char *key, const char *filename)
 {
+
+    printf("Loading key from %s\n", filename);
     char b64_key[sodium_base64_ENCODED_LEN(crypto_aead_aes256gcm_KEYBYTES, sodium_base64_VARIANT_ORIGINAL)];
     FILE *key_file = fopen(filename, "r");
     if (key_file == NULL)

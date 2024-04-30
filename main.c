@@ -37,27 +37,39 @@ int main(int argc, char *argv[])
 
     extern superblock_t sb;
 
-    if (argc < 3)
+    printf("argc %d\n", argc);
+
+    for (int i = 0; i < argc; i++)
     {
-        printf("Key not provided, generating a new one\n");
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        generate_and_store_key("key.txt");
-        load_key(key, "key.txt");
-    }
-    else
-    {
-        extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-        load_key(key, argv[argc - 1]);
-        printf("key %s\n", key);
-        argc--;
+        printf("argv[%d] %s\n", i, argv[i]);
     }
 
-    // Check if a superblock path is provided as an argument
     if (argc < 3)
     {
         printf("Usage: %s <mountpoint> <superblock_path> <key>\n", argv[0]);
+        printf("Usage for random keygen: %s keygen <key_path>\n", argv[0]);
         return 1;
     }
+
+    if (strcmp(argv[1], "keygen") == 0)
+    {
+        if (argc < 3)
+        {
+            printf("Usage: %s keygen <key_path>\n", argv[0]);
+            return 1;
+        }
+        generate_and_store_key(argv[2]);
+        return 0;
+    }
+
+    // last argument is the key
+
+    extern unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
+    load_key(key, argv[argc - 1]);
+    printf("key %s\n", key);
+    argc--;
+
+    // last second argument is the superblock path
 
     extern char superblock_path[MAX_PATH_LENGTH];
 

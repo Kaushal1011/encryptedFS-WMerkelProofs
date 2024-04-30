@@ -17,7 +17,7 @@ make
 or 
     
 ```bash
-./encryptFS.out -f -d  ~/hello superblock1.bin 
+./encryptFS.out keygen key.txt
 ```
 
 when key is not provided, the program will generate a random key and store it in key.txt (dont forget to save it somewhere safe)
