@@ -153,7 +153,10 @@ void init_inode(inode *node, const char *path, mode_t mode)
 
 int allocate_inode_bmp(bitmap_t *bmp, char *volume_id)
 {
-    for (int i = 0; i < INODES_PER_VOLUME; ++i)
+    printf("Allocating inode bitmap for %s\n", volume_id);
+
+    //  for safety reasons, we will not allocate the first inode
+    for (int i = 1; i < INODES_PER_VOLUME; ++i)
     {
         if (is_bit_free(bmp->inode_bmp, i))
         {

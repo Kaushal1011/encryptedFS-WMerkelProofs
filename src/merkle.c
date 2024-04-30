@@ -50,24 +50,23 @@ bool compare_hashes(const char *hash1, const char *hash2)
 
 void update_merkle_node(MerkleNode *node, const char *new_hash)
 {
-    printf("Updating merkle node\n");
-    memcpy(node->hash, new_hash, 65);
-    printf("updated Node hash: %s\n", node->hash);
-    // Update the parent nodes
-    while (node->parent)
+    strcpy(node->hash, new_hash); // Update the node's hash directly with new hash
+
+    // Update parent nodes
+    MerkleNode *current = node;
+    while (current->parent)
     {
-        char concat_hash[130];
-        if (node->parent->left && node->parent->right)
+        char combined_hash[130];
+        if (current->parent->left && current->parent->right)
         {
-            memcpy(concat_hash, node->parent->left->hash, 65);
-            memcpy(concat_hash + 65, node->parent->right->hash, 65);
+            sprintf(combined_hash, "%s%s", current->parent->left->hash, current->parent->right->hash);
         }
         else
         {
-            memcpy(concat_hash, node->hash, 65); // Single child scenario
+            sprintf(combined_hash, "%s%s", current->hash, current->hash); // Edge case: single child
         }
-        compute_hash(concat_hash, node->parent->hash);
-        node = node->parent;
+        compute_hash(combined_hash, current->parent->hash);
+        current = current->parent;
     }
 }
 

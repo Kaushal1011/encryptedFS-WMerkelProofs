@@ -4,8 +4,8 @@
 // Constants for the filesystem
 #define BLOCK_SIZE 4096
 #define INODE_SIZE 512
-#define INODES_PER_VOLUME 3
-#define DATA_BLOCKS_PER_VOLUME 1
+#define INODES_PER_VOLUME 9      // minimum is 3
+#define DATA_BLOCKS_PER_VOLUME 2 // minimum is 2
 #define MAX_CHILDREN 128
 #define MAX_PATH_LENGTH 256
 #define MAX_NAME_LENGTH 256

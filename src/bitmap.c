@@ -63,6 +63,7 @@ bool is_bit_free(char *bitmap, int index)
 
 int allocate_data_block(bitmap_t *bmp, char *volume_id)
 {
+    printf("Allocating data block for %s\n", volume_id);
     for (int i = 0; i < DATA_BLOCKS_PER_VOLUME; ++i)
     {
         if (is_bit_free(bmp->datablock_bmp, i))

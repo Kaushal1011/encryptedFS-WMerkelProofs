@@ -19,6 +19,9 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
     int inode_index = funcPoint(bmp, volume_id_new);
     int volume_num = atoi(volume_id_new) + 1;
 
+    // load new volumes bitmap and check for free inode
+    bitmap_t bmp_new;
+
     while (inode_index == -1)
     {
         printf("Expanding volume SEarCH\n");
@@ -33,8 +36,10 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
         if (volume_num < sb->volume_count)
         {
             sprintf(volume_id_new, "%d", volume_num);
-            inode_index = funcPoint(bmp, volume_id_new);
+            read_bitmap(volume_id_new, &bmp_new);
+            inode_index = funcPoint(&bmp_new, volume_id_new);
             printf("inode_index: %d\n", inode_index);
+            printf("volume_id_new: %s\n", volume_id_new);
             if (inode_index != -1)
             {
                 strcpy(volume_id, volume_id_new);
@@ -51,13 +56,13 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
             printf("created new volume file");
             create_volume_files_local(volume_num, sb);
             sprintf(volume_id_new, "%d", volume_num);
-            bitmap_t bmp;
-            memset(&bmp, 0, sizeof(bmp));
+            bitmap_t bmp_new;
+            memset(&bmp_new, 0, sizeof(bmp));
             //  set inode 0 as used data node 0 as used to avoid overwriting root inode
-            set_bit(bmp.inode_bmp, 0);     // never used for expansion safety 0*(volid) = 0
-            set_bit(bmp.datablock_bmp, 0); // never used for expansion safety
-            write_bitmap(volume_id_new, &bmp);
-            inode_index = funcPoint(&bmp, volume_id_new);
+            set_bit(bmp_new.inode_bmp, 0);     // never used for expansion safety 0*(volid) = 0
+            set_bit(bmp_new.datablock_bmp, 0); // never used for expansion safety
+            write_bitmap(volume_id_new, &bmp_new);
+            inode_index = funcPoint(&bmp_new, volume_id_new);
             printf("inode_index: %d\n", inode_index);
             //  store superblock
             extern char superblock_path[MAX_PATH_LENGTH];
@@ -97,7 +102,9 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     // Allocate a new inode for the file
     int inode_index = manage_volume_allocation(&sb, volume_id, &bmp, allocate_inode_bmp);
 
-    inode_index = inode_index * (atoi(volume_id) + 1);
+    inode_index = inode_index + INODES_PER_VOLUME * atoi(volume_id);
+
+    printf("inode_index after volume adjust: %d\n", inode_index);
 
     if (inode_index == -1)
     {
@@ -119,7 +126,7 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     if (root_inode.num_children < MAX_CHILDREN)
     {
-        root_inode.children[root_inode.num_children++] = inode_index * (atoi(volume_id) + 1);
+        root_inode.children[root_inode.num_children++] = inode_index;
         write_inode(0, &root_inode); // Update root inode
     }
     else
@@ -211,10 +218,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     size_t bytes_written = 0;
     off_t pos = offset;
 
-    char *volume_id_datablocks = "0";
-    //  seprate variable incase we have datablocks in a different volume from inode volume
-    //  for datablock indexing should be index = index*(volume_index+1) when we store in inodes so we know what blocks to read incase of
-    //  fragmented storage
+    char volume_id_datablocks[2] = "0";
     while (bytes_written < size)
     {
         int block_index = pos / BLOCK_SIZE;
@@ -227,12 +231,16 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
         {
             // Allocate a new block
             int new_block_index = manage_volume_allocation(&sb, volume_id_datablocks, &bmp, allocate_data_block);
+
+            printf("new_block_index: %d\n", new_block_index);
+            printf("volume_id_datablocks: %s\n", volume_id_datablocks);
+
             allocate_new_block = 1;
 
             if (new_block_index == -1)
                 return -ENOSPC; // No space left
 
-            file_inode.datablocks[block_index] = new_block_index * (atoi(volume_id_datablocks) + 1);
+            file_inode.datablocks[block_index] = new_block_index + DATA_BLOCKS_PER_VOLUME * atoi(volume_id_datablocks);
             file_inode.num_datablocks += 1;
         }
 
@@ -323,7 +331,7 @@ int fs_truncate(const char *path, off_t newsize)
             if (new_block_index == -1)
                 return -ENOSPC; // No space left for new blocks
 
-            file_inode.datablocks[i] = new_block_index * (atoi(volume_id) + 1);
+            file_inode.datablocks[i] = new_block_index + DATA_BLOCKS_PER_VOLUME * atoi(volume_id);
             file_inode.num_datablocks += 1;
 
             // Initialize the new block to zero

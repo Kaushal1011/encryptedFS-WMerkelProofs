@@ -153,11 +153,15 @@ void read_volume_block(int block_index, void *buf)
 
 void write_volume_block(int block_index, const void *buf, size_t buf_size)
 {
+    printf("Writing block %d\n", block_index);
+
     char volume_id[2] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
 
     int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
+
+    printf("Writing block %d with volume %d\n", block_index_in_volume, volume_id_int);
 
     char volume_filename[256];
     unsigned char block_buffer[BLOCK_SIZE];

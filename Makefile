@@ -12,7 +12,8 @@ opflag := -o encryptFS.out
 all: compile cleanup
 
 clean:
-	-rm -f encryptFS.out
+	-rm -f encryptFS.out 
+	-rm -rf *.bin
 
 run: compile cleanup
 	$(opflag) -f $(mountpoint) /home/$(username)/file.txt

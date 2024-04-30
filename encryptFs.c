@@ -215,6 +215,8 @@ bool is_bit_free(unsigned char *bitmap, int index)
 
 int allocate_inode_bmp(bitmap_t *bmp, const char *volume_id)
 {
+    printf("Allocating inode for volume %s\n", volume_id);
+
     for (int i = 0; i < INODES_PER_VOLUME; ++i)
     {
         if (is_bit_free(bmp->inode_bmp, i))
@@ -505,6 +507,7 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
 // Utility function to find the first free block in the bitmap and allocate it.
 int allocate_data_block(bitmap_t *bmp, const char *volume_id)
 {
+    printf("Allocating data block for %s\n", volume_id);
     for (int i = 0; i < DATA_BLOCKS_PER_VOLUME; ++i)
     {
         if (is_bit_free(bmp->datablock_bmp, i))
