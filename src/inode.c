@@ -124,6 +124,11 @@ void init_inode(inode *node, const char *path, mode_t mode)
     node->num_children = 0;
     node->parent_inode = -1; // If creating a root inode or parent is not known at this stage
 
+    for (int i = 0; i < MAX_CHILDREN; ++i)
+    {
+        node->children[i] = -1; // Initialize all children indices to -1 indicating they are not used
+    }
+
     // Initialize encryption-related fields if necessary
 
     // Initialize the file type and link count
@@ -164,15 +169,28 @@ int find_inode_index_by_path(char *volume_id, const char *target_path)
         return -1;
     }
 
+    inode root;
+    // read the root inode
+    read_inode("0", 0, &root);
+
+    // check if the root inode is the target
+    if (strcmp(root.path, target_path) == 0)
+    {
+        printf("Root inode is the target %s %s \n", root.path, target_path);
+
+        fclose(file);
+        return 0;
+    }
+
     inode temp_inode;
 
-    for (int i = 0; i < INODES_PER_VOLUME; i++)
+    for (int i = 0; i < root.num_children; i++)
     {
-        read_inode(volume_id, i, &temp_inode);
+        read_inode(volume_id, root.children[i], &temp_inode);
         if (strcmp(temp_inode.path, target_path) == 0)
         {
             fclose(file);
-            return i;
+            return root.children[i];
         }
     }
 
