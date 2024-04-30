@@ -2,20 +2,36 @@
 
 
 # Compile Instructions
-```bash
-gcc encryptFs.c -o ./eFS.out `pkg-config fuse --cflags --libs`
-```
-
-OR
 
 ```bash
-gcc -I./include main.c src/bitmap.c src/fs_operations.c src/inode.c src/volume.c -o myFS2 `pkg-config --cflags --libs fuse` -DFUSE_USE_VERSION=30
+make
 ```
+
 
 # Run Instructions
 
 ```bash
-./eFS.out -f -d  ~/hello superblock.BIN
+./encryptFS.out -f -d  ~/hello superblock1.bin key.txt 
+```
+
+or 
+    
+```bash
+./encryptFS.out -f -d  ~/hello superblock1.bin 
+```
+
+when key is not provided, the program will generate a random key and store it in key.txt (dont forget to save it somewhere safe)
+
+# Clean up 
+
+```bash
+make clean
+```
+
+# Unmount Instructions
+
+```bash
+fusermount -u ~/hello
 ```
 
 # Test Instructions
