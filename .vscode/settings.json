@@ -10,6 +10,7 @@
         "volume.h": "c",
         "string.h": "c",
         "stat.h": "c",
-        "bitmap.h": "c"
+        "bitmap.h": "c",
+        "cloud_storage.h": "c"
     }
 }

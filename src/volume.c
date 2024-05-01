@@ -7,10 +7,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <curl/curl.h>
+#include "cloud_storage.h"
 
 superblock_t sb;
 
 char superblock_path[MAX_PATH_LENGTH];
+
+char remote_superblock_path[MAX_PATH_LENGTH];
 
 // Initialize a volume with default paths and settings
 void init_volume(volume_info_t *volume, const char *path, volume_type type, int volume_id)
@@ -38,6 +42,7 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
         sb->volume_count = 1;
         sb->block_size = BLOCK_SIZE;
         sb->inode_size = sizeof(inode);
+        sb->vtype = LOCAL;
         create_volume_files_local(0, sb);
         // Create the root directory inode
         inode root_inode;
@@ -72,6 +77,163 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
         printf("Merkle path: %s\n", sb->volumes[i].merkle_path);
         printf("Inodes count: %d\n", sb->volumes[i].inodes_count);
         printf("Blocks count: %d\n", sb->volumes[i].blocks_count);
+    }
+}
+
+void load_or_create_remote_superblock(const char *path, superblock_t *sb)
+{
+    printf("Downloading superblock from remote storage\n");
+    // try to download file from google drive
+
+    //  extract directory name from path
+    char *directory = strdup(path);
+
+    char *last_slash = strrchr(directory, '/');
+
+    if (last_slash != NULL)
+    {
+        *last_slash = '\0';
+    }
+
+    printf("Directory: %s\n", directory);
+
+    //  extract file name from path
+    char *filename = strdup(path);
+
+    if (last_slash != NULL)
+    {
+        filename = last_slash + 1;
+    }
+
+    printf("Filename: %s\n", filename);
+
+    extern OAuthTokens tokens;
+
+    // try to download file from google drive
+
+    int res = download_file_from_folder(directory, filename, &tokens);
+
+    //  read the superblock file and check if it contains 404
+    FILE *file = fopen(filename, "r+");
+
+    char *buffer = (char *)malloc(256);
+    fread(buffer, 256, 1, file);
+    int success = 0;
+    if (strstr(buffer, "404") != NULL)
+    {
+        printf("File not found\n");
+
+        success = 1;
+    }
+
+    if (success == 1)
+    {
+        printf("File not found\n");
+        // delete the file
+        fclose(file);
+        free(buffer);
+        remove(filename);
+    }
+
+    if (res != CURLE_OK || success == 1)
+    {
+        printf("Error: Unable to download superblock file from remote storage.\n");
+        // create a new superblock with local paths and remote type
+
+        extern char remote_superblock_path[MAX_PATH_LENGTH];
+
+        strcpy(remote_superblock_path, path);
+
+        FILE *file = fopen(filename, "rb+");
+
+        extern char superblock_path[MAX_PATH_LENGTH];
+
+        strcpy(superblock_path, filename);
+
+        if (!file)
+        {
+            printf("Superblock file not found, creating a new one.\n");
+            file = fopen(filename, "wb+");
+            for (int i = 0; i < 10; i++)
+            {
+                init_volume(&sb->volumes[i], "./", GDRIVE, i);
+            }
+            sb->volume_count = 1;
+            sb->block_size = BLOCK_SIZE;
+            sb->inode_size = sizeof(inode);
+            sb->vtype = GDRIVE;
+            create_volume_files_local(0, sb);
+            // Create the root directory inode
+            inode root_inode;
+            init_inode(&root_inode, "/", S_IFDIR | 0777);
+            write_inode(0, &root_inode);
+            bitmap_t root_bmp;
+            memset(&root_bmp, 0, sizeof(root_bmp));
+            set_bit(root_bmp.inode_bmp, 0);
+            write_bitmap("0", &root_bmp);
+            fwrite(sb, sizeof(superblock_t), 1, file);
+        }
+    }
+    else
+    {
+        extern char remote_superblock_path[MAX_PATH_LENGTH];
+
+        strcpy(remote_superblock_path, path);
+
+        FILE *file = fopen(filename, "rb+");
+
+        extern char superblock_path[MAX_PATH_LENGTH];
+
+        strcpy(superblock_path, filename);
+
+        fread(sb, sizeof(superblock_t), 1, file);
+
+        printf("In here is here ");
+
+        for (int i = 0; i < sb->volume_count; i++)
+        {
+            //  download all the volume files
+            char *volume_id = (char *)malloc(9);
+            sprintf(volume_id, "%d", i);
+            char *inodes_path = (char *)malloc(MAX_PATH_LENGTH);
+            char *bitmap_path = (char *)malloc(MAX_PATH_LENGTH);
+            char *volume_path = (char *)malloc(MAX_PATH_LENGTH);
+            char *merkle_path = (char *)malloc(MAX_PATH_LENGTH);
+
+            snprintf(inodes_path, MAX_PATH_LENGTH, "inodes_%s.bin", volume_id);
+            snprintf(bitmap_path, MAX_PATH_LENGTH, "bmp_%s.bin", volume_id);
+            snprintf(volume_path, MAX_PATH_LENGTH, "volume_%s.bin", volume_id);
+            snprintf(merkle_path, MAX_PATH_LENGTH, "merkle_%s.bin", volume_id);
+
+            int res = download_file_from_folder(directory, inodes_path, &tokens);
+            if (res != CURLE_OK)
+            {
+                printf("Error: Unable to download inodes file from remote storage.\n");
+            }
+
+            res = download_file_from_folder(directory, bitmap_path, &tokens);
+            if (res != CURLE_OK)
+            {
+                printf("Error: Unable to download bitmap file from remote storage.\n");
+            }
+
+            res = download_file_from_folder(directory, volume_path, &tokens);
+            if (res != CURLE_OK)
+            {
+                printf("Error: Unable to download volume file from remote storage.\n");
+            }
+
+            res = download_file_from_folder(directory, merkle_path, &tokens);
+            if (res != CURLE_OK)
+            {
+                printf("Error: Unable to download merkle file from remote storage.\n");
+            }
+        }
+
+        for (int i = 0; i < sb->volume_count; i++)
+        {
+            sb->volumes[i].merkle_tree = load_merkle_tree_from_file(sb->volumes[i].merkle_path);
+        }
     }
 }
 

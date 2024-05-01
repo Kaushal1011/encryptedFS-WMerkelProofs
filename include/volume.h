@@ -45,5 +45,6 @@ void create_volume_files_local(int i, superblock_t *sb);
 void read_volume_block(int block_index, void *buf);
 void read_volume_block_no_check(int block_index, void *buf);
 void write_volume_block(int block_index, const void *buf, size_t buf_size);
+void load_or_create_remote_superblock(const char *path, superblock_t *sb);
 
 #endif // VOLUME_H

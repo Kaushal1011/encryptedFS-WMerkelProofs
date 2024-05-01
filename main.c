@@ -22,6 +22,7 @@
 #include "crypto.h"
 #include <sodium/crypto_aead_aes256gcm.h>
 #include <sodium.h>
+#include "cloud_storage.h"
 
 void add_inode_to_directory(int dir_inode_index, int file_inode_index)
 {
@@ -79,9 +80,36 @@ int main(int argc, char *argv[])
     // Modify the argument list to remove the superblock path
     argc--;
 
-    // Attempt to load the superblock, or create a new one if it doesn't exist
-    load_or_create_superblock(superblock_path, &sb);
+    extern OAuthTokens tokens;
 
+    if (read_tokens_from_file("tokens.txt", &tokens) != 0)
+    {
+        fprintf(stderr, "Failed to read tokens.\n");
+        tokens.access_token[0] = '\0';
+        tokens.refresh_token[0] = '\0';
+        tokens.token_uri[0] = '\0';
+        tokens.client_id[0] = '\0';
+        tokens.client_secret[0] = '\0';
+    }
+
+    // check if the superblock path cotains 'remote' or not
+
+    if (strstr(superblock_path, "remote") != NULL)
+    {
+        printf("remote\n");
+        // download superblock
+        //  remove remote from the path
+        char *remote = strstr(superblock_path, "remote:");
+        // extract the directory
+        // remove remote from the path
+        remote += 7;
+        load_or_create_remote_superblock(remote, &sb);
+    }
+    else
+    {
+        // Attempt to load the superblock, or create a new one if it doesn't exist
+        load_or_create_superblock(superblock_path, &sb);
+    }
     // Proceed with FUSE main loop
     return fuse_main(argc, argv, &fs_operations, NULL);
 }

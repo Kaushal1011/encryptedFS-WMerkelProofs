@@ -29,14 +29,13 @@ MerkleNode *create_merkle_node(const char *hash, MerkleNode *left, MerkleNode *r
         node->right = right;
         node->parent = NULL;
         node->block_index = block_index;
-        // Set min and max indices, helps when searching for a leaf node
+        // Set min and max indices
         node->min_index = (left ? left->min_index : block_index);
         node->max_index = (right ? right->max_index : block_index);
     }
     return node;
 }
 
-// Compute the SHA-256 hash of the input string
 void compute_hash(const char *input, char *output)
 {
     unsigned char temp_hash[SHA256_DIGEST_LENGTH];
@@ -44,37 +43,35 @@ void compute_hash(const char *input, char *output)
     hash_to_hex(temp_hash, output, SHA256_DIGEST_LENGTH); // Convert binary hash to hex string
 }
 
-// Compare two hashes for equality
 bool compare_hashes(const char *hash1, const char *hash2)
 {
     return strcmp(hash1, hash2) == 0; // Use strcmp for string comparison
 }
 
-// Update the hash of a Merkle node and propagate the change up the tree
 void update_merkle_node(MerkleNode *node, const char *new_hash)
 {
-    strcpy(node->hash, new_hash); // Update the node's hash directly with new hash
-
-    // Update parent nodes
-    MerkleNode *current = node;
-    while (current->parent)
+    printf("Updating merkle node\n");
+    memcpy(node->hash, new_hash, 65);
+    printf("updated Node hash: %s\n", node->hash);
+    // Update the parent nodes
+    while (node->parent)
     {
-        char combined_hash[130];
-        if (current->parent->left && current->parent->right)
+        char concat_hash[130];
+        if (node->parent->left && node->parent->right)
         {
-            sprintf(combined_hash, "%s%s", current->parent->left->hash, current->parent->right->hash);
+            memcpy(concat_hash, node->parent->left->hash, 65);
+            memcpy(concat_hash + 65, node->parent->right->hash, 65);
         }
         else
         {
-            sprintf(combined_hash, "%s%s", current->hash, current->hash); // Edge case: single child
+            memcpy(concat_hash, node->hash, 65); // Single child scenario
+            memcpy(concat_hash + 65, node->hash, 65);
         }
-        compute_hash(combined_hash, current->parent->hash);
-        current = current->parent;
+        compute_hash(concat_hash, node->parent->hash);
+        node = node->parent;
     }
 }
 
-// Build a Merkle tree from an array of block hashes
-// used to build merkle tree when initializing a volume
 MerkleTree *build_merkle_tree(char **block_hashes, int num_blocks)
 {
     printf("Building merkle tree\n");
@@ -136,7 +133,6 @@ MerkleTree *build_merkle_tree(char **block_hashes, int num_blocks)
     return tree;
 }
 
-// Verify the Merkle path from a leaf node to the root
 bool verify_merkle_path(MerkleNode *leaf_node, const char *expected_root_hash, char decrypted_hash[65])
 {
     printf("Verifying merkle path\n");

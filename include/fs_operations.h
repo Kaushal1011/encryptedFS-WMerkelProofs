@@ -38,6 +38,9 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 int fs_rename(const char *from, const char *to);
 //  rm or delete
 int fs_unlink(const char *path);
+// clean up and destroy the file system
+// upload if remote
+void fs_destroy();
 
 extern const struct fuse_operations fs_operations;
 

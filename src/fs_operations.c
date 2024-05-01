@@ -6,9 +6,11 @@
 #include <stdbool.h>
 #include <fuse.h>
 #include <libgen.h>
+#include <curl/curl.h>
 
 #include "fs_operations.h"
 #include "volume.h"
+#include "cloud_storage.h"
 
 // function pointer type def for allocation functions
 typedef int (*alloc_func)(bitmap_t *bmp, char *volume_id);
@@ -523,6 +525,74 @@ int fs_unlink(const char *path)
     return 0; // Success
 }
 
+void fs_destroy()
+{
+    printf("destroy\n");
+    extern superblock_t sb;
+
+    extern char superblock_path[MAX_PATH_LENGTH];
+
+    extern char remote_superblock_path[MAX_PATH_LENGTH];
+
+    if (sb.vtype == GDRIVE)
+    {
+        printf("uploading to remote\n");
+
+        char foldername[MAX_PATH_LENGTH];
+        strcpy(foldername, remote_superblock_path);
+
+        char *last_slash = strrchr(foldername, '/');
+
+        if (last_slash != NULL)
+        {
+            *last_slash = '\0';
+        }
+
+        for (int i = 0; i < sb.volume_count; i++)
+        {
+            extern OAuthTokens tokens;
+            // upload bmp file
+            char volume_id[9];
+            sprintf(volume_id, "%d", i);
+            char *bmp_path = strrchr(sb.volumes[i].bitmap_path, '/') + 1;
+            if (upload_file_to_folder(foldername, bmp_path, &tokens) != CURLE_OK)
+            {
+                perror("upload failed bmp");
+            }
+
+            char *inodes_path = strrchr(sb.volumes[i].inodes_path, '/') + 1;
+            // upload inode file
+            if (upload_file_to_folder(foldername, inodes_path, &tokens) != CURLE_OK)
+            {
+                perror("upload failed inode");
+            }
+
+            char *volume_path = strrchr(sb.volumes[i].volume_path, '/') + 1;
+            // upload data file
+            if (upload_file_to_folder(foldername, volume_path, &tokens) != CURLE_OK)
+            {
+                perror("upload failed data");
+            }
+
+            char *merkle_path = strrchr(sb.volumes[i].merkle_path, '/') + 1;
+            // upload merkle file
+            if (upload_file_to_folder(foldername, merkle_path, &tokens) != CURLE_OK)
+            {
+                perror("upload failed merkle");
+            }
+        }
+
+        // finally upload the superblock
+
+        if (upload_file_to_folder(foldername, superblock_path, &tokens) != CURLE_OK)
+        {
+            perror("upload failed superblock");
+        }
+    }
+
+    return;
+}
+
 const struct fuse_operations fs_operations = {
     .getattr = fs_getattr,
     .open = fs_open,
@@ -533,4 +603,5 @@ const struct fuse_operations fs_operations = {
     .read = fs_read,
     .write = fs_write,
     .truncate = fs_truncate,
+    .destroy = fs_destroy,
 };

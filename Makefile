@@ -2,9 +2,9 @@ username := $(shell whoami)
 mountpoint := /home/$(username)/hello
 includepath := -I./include
 srcprefix := ./src/
-files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c $(srcprefix)merkle.c $(srcprefix)crypto.c 
-cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse openssl libsodium` -DFUSE_USE_VERSION=30
-ldflags := `pkg-config --libs fuse openssl libsodium`
+files := main.c $(srcprefix)fs_operations.c $(srcprefix)bitmap.c $(srcprefix)inode.c $(srcprefix)volume.c $(srcprefix)merkle.c $(srcprefix)crypto.c  $(srcprefix)cloud_storage.c
+cflags := -Wall $(includepath) -D_FILE_OFFSET_BITS=64 `pkg-config --cflags fuse openssl libsodium libcurl` -DFUSE_USE_VERSION=30
+ldflags := `pkg-config --libs fuse openssl libsodium libcurl`
 opflag := -o encryptFS.out
 
 .PHONY: all run drun bgrun compile dcompile checkdir dmkfs mkfs_dcompile mkfs mkfs_compile cleanup
@@ -14,6 +14,7 @@ all: compile
 clean:
 	-rm -f encryptFS.out 
 	-rm -rf *.bin
+	# -rm -rf merkle_*.txt
 keygen:
 	./encryptFS.out keygen ./key.txt
 run: 
