@@ -6,7 +6,7 @@
 
 ## Key Features
 - FUSE-based Implementation: Operates in user-space, allowing for enhanced security without kernel modifications.
-- AES GCM Encryption: Provides strong encryption and authentication for data.
+- AES GCM Encryption: Provides strong encryption and authentication for data. [(Libsodium Implementation Guide)](https://libsodium.gitbook.io/doc/secret-key_cryptography/aead/aes-256-gcm)
 - Dynamically Expanding Volumes: Facilitates on-the-fly storage expansion to accommodate growing data needs.
 - Cloud Backup and Restoration: Supports secure cloud storage solutions for disaster recovery.
 - Merkle Tree Integrity Verification: Ensures data remains unaltered and secure against unauthorized changes.
