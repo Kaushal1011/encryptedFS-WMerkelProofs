@@ -104,7 +104,12 @@ cat cat.txt # Read the file, integrity check will be performed
 ls -l # List the files, in the root directory
 nano dog.txt # Create a new file you can paste content more then block size to check multi block allocation and read
 cat dog.txt # Read the file, integrity check will be performed
-# other supported operations can be tested as well.
+# other supported operations can be tested as well like cp, mv, rm -rf, etc.
+# test image files 
+cp ./assets/cat.jpg ~/hello/
+cp ./assets/cat.mp3 ~/hello/
+feh ~/hello/cat.jpg # view the image
+vlc ~/hello/cat.mp3 # play the audio
 ```
 
 ## File System Structure
