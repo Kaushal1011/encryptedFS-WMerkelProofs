@@ -126,3 +126,17 @@ cat dog.txt # Read the file, integrity check will be performed
 ### Merkle Tree Update
 
 ![merkle](./assets/merkletreeupdates.png)
+
+## Algorithms
+
+### Create, Read, Write
+
+![crw](./assets/writereadcreatealgo.png)
+
+### Mount, Unmount
+
+![mount](./assets/mountunmountalgo.png)
+
+### Misc
+
+![misc](./assets/miscalgo.png)
