@@ -1,3 +1,4 @@
+// File: inode.c
 #include "inode.h"
 #include "crypto.h"
 #include <stdio.h>
@@ -11,7 +12,7 @@ void read_inode(int inode_index, inode *inode_buf)
 {
     // if inode index is greater than the total number of inodes,
     //  we handle it to read the inode from the next volume
-    printf("Reading inode %d\n", inode_index);
+    printf("inode: Reading inode %d\n", inode_index);
     char volume_id[9] = "0";
 
     int volume_id_int = inode_index / INODES_PER_VOLUME;
@@ -19,7 +20,7 @@ void read_inode(int inode_index, inode *inode_buf)
 
     int inode_index_in_volume = inode_index % INODES_PER_VOLUME;
 
-    printf("Reading inode %d\n", inode_index_in_volume);
+    printf("inode: Reading inode index in volume %d\n", inode_index_in_volume);
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
     FILE *file = fopen(inode_filename, "rb");
@@ -54,7 +55,7 @@ void write_inode(int inode_index, const inode *inode_buf)
     // if inode index is greater than the total number of inodes,
     //  we handle it to write the inode to the next volume
 
-    printf("Writing inode %d\n", inode_index);
+    printf("inode: Writing inode %d\n", inode_index);
     char volume_id[9] = "0";
 
     int volume_id_int = inode_index / INODES_PER_VOLUME;
@@ -62,13 +63,12 @@ void write_inode(int inode_index, const inode *inode_buf)
 
     int inode_index_in_volume = inode_index % INODES_PER_VOLUME;
 
-    printf("Writing inode %d\n", inode_index_in_volume);
+    printf("inode: Writing inode in volume %d\n", volume_id_int);
 
     char inode_filename[256];
     sprintf(inode_filename, "inodes_%s.bin", volume_id);
 
-    printf("Writing inode %d\n", inode_index_in_volume);
-    printf("Writing inode %s\n", inode_filename);
+    printf("inode: Writing inode %d\n", inode_index_in_volume);
     FILE *file = fopen(inode_filename, "r+b");
     if (file)
     {
@@ -158,7 +158,7 @@ void init_inode(inode *node, const char *path, mode_t mode)
 
 int allocate_inode_bmp(bitmap_t *bmp, char *volume_id)
 {
-    printf("Allocating inode bitmap for %s\n", volume_id);
+    printf("inode: Allocating inode bitmap for %s\n", volume_id);
 
     //  for safety reasons, we will not allocate the first inode
     for (int i = 1; i < INODES_PER_VOLUME; ++i)
@@ -188,7 +188,7 @@ int find_inode_index_by_path(const char *target_path)
     // check if the root inode is the target
     if (strcmp(root.path, target_path) == 0)
     {
-        printf("Root inode is the target %s %s \n", root.path, target_path);
+        printf("inode: Root inode is the target %s %s \n", root.path, target_path);
         return 0;
     }
 

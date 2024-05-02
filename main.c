@@ -1,3 +1,4 @@
+// File: main.c
 #define FUSE_USE_VERSION 30
 
 #include <libgen.h>
@@ -30,9 +31,10 @@ void add_inode_to_directory(int dir_inode_index, int file_inode_index)
 
 int main(int argc, char *argv[])
 {
-
+    printf("main: starting the file system\n");
     if (sodium_init() == -1)
     {
+        printf("libsodium init failed\n");
         return 1; // libsodium didn't initialize properly
     }
 
@@ -96,7 +98,7 @@ int main(int argc, char *argv[])
 
     if (strstr(superblock_path, "remote") != NULL)
     {
-        printf("remote\n");
+        printf("main: loading remote superblock \n");
         // download superblock
         //  remove remote from the path
         char *remote = strstr(superblock_path, "remote:");
@@ -110,6 +112,9 @@ int main(int argc, char *argv[])
         // Attempt to load the superblock, or create a new one if it doesn't exist
         load_or_create_superblock(superblock_path, &sb);
     }
+
+    printf("main: superblock loaded, mounting\n");
+
     // Proceed with FUSE main loop
     return fuse_main(argc, argv, &fs_operations, NULL);
 }

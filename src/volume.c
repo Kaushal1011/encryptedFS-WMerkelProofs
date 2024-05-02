@@ -1,3 +1,4 @@
+// File: volume.c
 #include "volume.h"
 #include "bitmap.h"
 #include "inode.h"
@@ -33,7 +34,7 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
     FILE *file = fopen(path, "rb+");
     if (!file)
     {
-        printf("Superblock file not found, creating a new one.\n");
+        printf("volume: Superblock file not found, creating a new one.\n");
         file = fopen(path, "wb+");
         for (int i = 0; i < 10; i++)
         {
@@ -64,25 +65,25 @@ void load_or_create_superblock(const char *path, superblock_t *sb)
     }
     fclose(file);
 
-    printf("Superblock loaded\n");
-    printf("Volume count: %d\n", sb->volume_count);
-    printf("Block size: %d\n", sb->block_size);
-    printf("Inode size: %d\n", sb->inode_size);
+    printf("volume: Superblock loaded\n");
+    printf("volume: Volume count: %d\n", sb->volume_count);
+    printf("volume: Block size: %d\n", sb->block_size);
+    printf("volume: Inode size: %d\n", sb->inode_size);
     for (int i = 0; i < sb->volume_count; i++)
     {
-        printf("Volume %d:\n", i);
-        printf("Inodes path: %s\n", sb->volumes[i].inodes_path);
-        printf("Bitmap path: %s\n", sb->volumes[i].bitmap_path);
-        printf("Volume path: %s\n", sb->volumes[i].volume_path);
-        printf("Merkle path: %s\n", sb->volumes[i].merkle_path);
-        printf("Inodes count: %d\n", sb->volumes[i].inodes_count);
-        printf("Blocks count: %d\n", sb->volumes[i].blocks_count);
+        printf("volume: Volume %d:\n", i);
+        printf("volume: Inodes path: %s\n", sb->volumes[i].inodes_path);
+        printf("volume: Bitmap path: %s\n", sb->volumes[i].bitmap_path);
+        printf("volume: Volume path: %s\n", sb->volumes[i].volume_path);
+        printf("volume: Merkle path: %s\n", sb->volumes[i].merkle_path);
+        printf("volume: Inodes count: %d\n", sb->volumes[i].inodes_count);
+        printf("volume: Blocks count: %d\n", sb->volumes[i].blocks_count);
     }
 }
 
 void load_or_create_remote_superblock(const char *path, superblock_t *sb)
 {
-    printf("Downloading superblock from remote storage\n");
+    printf("volume: Downloading superblock from remote storage\n");
     // try to download file from google drive
 
     //  extract directory name from path
@@ -95,7 +96,7 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
         *last_slash = '\0';
     }
 
-    printf("Directory: %s\n", directory);
+    printf("volume: Directory: %s\n", directory);
 
     //  extract file name from path
     char *filename = strdup(path);
@@ -105,7 +106,7 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
         filename = last_slash + 1;
     }
 
-    printf("Filename: %s\n", filename);
+    printf("volume: Filename: %s\n", filename);
 
     extern OAuthTokens tokens;
 
@@ -121,14 +122,14 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
     int success = 0;
     if (strstr(buffer, "404") != NULL)
     {
-        printf("File not found\n");
+        printf("volume: File not found\n");
 
         success = 1;
     }
 
     if (success == 1)
     {
-        printf("File not found\n");
+        printf("volume: File not found\n");
         // delete the file
         fclose(file);
         free(buffer);
@@ -137,7 +138,7 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
 
     if (res != CURLE_OK || success == 1)
     {
-        printf("Error: Unable to download superblock file from remote storage.\n");
+        printf("volume: Error: Unable to download superblock file from remote storage.\n");
         // create a new superblock with local paths and remote type
 
         extern char remote_superblock_path[MAX_PATH_LENGTH];
@@ -152,7 +153,7 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
 
         if (!file)
         {
-            printf("Superblock file not found, creating a new one.\n");
+            printf("volume: Superblock file not found, creating a new one.\n");
             file = fopen(filename, "wb+");
             for (int i = 0; i < 10; i++)
             {
@@ -188,7 +189,7 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
 
         fread(sb, sizeof(superblock_t), 1, file);
 
-        printf("In here is here ");
+        printf("volume: Superblock loaded\n");
 
         for (int i = 0; i < sb->volume_count; i++)
         {
@@ -239,7 +240,7 @@ void load_or_create_remote_superblock(const char *path, superblock_t *sb)
 
 void create_volume_files_local(int i, superblock_t *sb)
 {
-    printf("Creating volume files for volume %d\n", i);
+    printf("volume: Creating volume files for volume %d\n", i);
 
     FILE *inodes_file = fopen(sb->volumes[i].inodes_path, "w");
     fclose(inodes_file);
@@ -248,12 +249,12 @@ void create_volume_files_local(int i, superblock_t *sb)
     FILE *volume_file = fopen(sb->volumes[i].volume_path, "w");
     fclose(volume_file);
 
-    printf("Volume files created for volume %d\n", i);
+    printf("volume: Volume files created for volume %d\n", i);
 
     FILE *merkle_file = fopen(sb->volumes[i].merkle_path, "wb+");
     if (!merkle_file)
     {
-        printf("Merkle file not found, creating a new one.\n");
+        printf("volume: Merkle file not found, creating a new one.\n");
         MerkleTree *merkle_tree = initialize_merkle_tree_for_volume(sb->volumes[i].volume_path);
         save_merkle_tree_to_file(merkle_tree, sb->volumes[i].merkle_path);
         sb->volumes[i].merkle_tree = merkle_tree;
@@ -268,11 +269,14 @@ void create_volume_files_local(int i, superblock_t *sb)
 
 void read_volume_block_no_check(int block_index, void *buf)
 {
+    printf("volume: Reading block %d\n", block_index);
     char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
 
     int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
+
+    printf("volume: Reading block %d with volume %d\n", block_index_in_volume, volume_id_int);
 
     char volume_filename[256];
     sprintf(volume_filename, "volume_%s.bin", volume_id);
@@ -290,7 +294,7 @@ void read_volume_block_no_check(int block_index, void *buf)
         fclose(file);
         if (decrypt_aes_gcm(buf, &decrypted_len, encrypted_data, sizeof(encrypted_data), nonce, key) != 0)
         {
-            printf("Decryption failed for block %d in volume %s\n", block_index_in_volume, volume_id);
+            printf("volume: Decryption failed for block %d in volume %s\n", block_index_in_volume, volume_id);
         }
     }
     else
@@ -301,6 +305,7 @@ void read_volume_block_no_check(int block_index, void *buf)
 
 void read_volume_block(int block_index, void *buf)
 {
+    printf("volume: Reading block %d\n", block_index);
     char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
     sprintf(volume_id, "%d", volume_id_int);
@@ -309,13 +314,13 @@ void read_volume_block(int block_index, void *buf)
 
     if (!verify_block_integrity(block_index))
     {
-        printf("Integrity check failed for block %d in volume %s\n", block_index, volume_id);
+        printf("volume: Integrity check failed for block %d in volume %s\n", block_index, volume_id);
     }
 }
 
 void write_volume_block(int block_index, const void *buf, size_t buf_size)
 {
-    printf("Writing block %d\n", block_index);
+    printf("volume: Writing block %d\n", block_index);
 
     char volume_id[9] = "0";
     int volume_id_int = block_index / DATA_BLOCKS_PER_VOLUME;
@@ -323,7 +328,7 @@ void write_volume_block(int block_index, const void *buf, size_t buf_size)
 
     int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
 
-    printf("Writing block %d with volume %d\n", block_index_in_volume, volume_id_int);
+    printf("volume: Writing block %d with volume %d\n", block_index_in_volume, volume_id_int);
 
     char volume_filename[256];
     unsigned char block_buffer[BLOCK_SIZE];
@@ -334,7 +339,7 @@ void write_volume_block(int block_index, const void *buf, size_t buf_size)
     // Ensure the buffer size does not exceed BLOCK_SIZE
     if (buf_size > BLOCK_SIZE)
     {
-        printf("Buffer size exceeds block size. Truncation may occur.\n");
+        printf("volume: Buffer size exceeds block size. Truncation may occur.\n");
         buf_size = BLOCK_SIZE;
     }
 
@@ -356,14 +361,14 @@ void write_volume_block(int block_index, const void *buf, size_t buf_size)
         fwrite(nonce, sizeof(nonce), 1, file);
         if (encrypt_aes_gcm(encrypted_data, &ciphertext_len, block_buffer, BLOCK_SIZE, nonce, key) != 0)
         {
-            printf("Encryption failed for block %d in volume %s\n", block_index_in_volume, volume_id);
+            printf("volume: Encryption failed for block %d in volume %s\n", block_index_in_volume, volume_id);
         }
         fwrite(encrypted_data, BLOCK_SIZE + crypto_aead_aes256gcm_ABYTES, 1, file);
         fclose(file);
     }
     else
     {
-        printf("Error: Unable to write to file %s.\n", volume_filename);
+        printf("volume: Error: Unable to write to file %s.\n", volume_filename);
     }
 
     update_merkle_node_for_block(volume_id, block_index_in_volume, block_buffer);

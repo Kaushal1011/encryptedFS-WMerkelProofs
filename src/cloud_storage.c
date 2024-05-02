@@ -1,5 +1,4 @@
-// cloud_storage.c
-
+// File: cloud_storage.c
 #include "../include/cloud_storage.h"
 #include <stdio.h>
 #include <curl/curl.h>
@@ -10,6 +9,8 @@ OAuthTokens tokens;
 
 int read_tokens_from_file(const char *filename, OAuthTokens *tokens)
 {
+    printf("cloud_storage: Reading tokens from file\n");
+
     FILE *file = fopen(filename, "r");
     if (!file)
     {
@@ -92,6 +93,7 @@ void add_auth_header(CURL *curl, OAuthTokens *creds)
 
 int upload_file_to_folder(const char *folder_name, const char *filename, OAuthTokens *tokens)
 {
+    printf("cloud_storage: Uploading file %s to folder %s\n", filename, folder_name);
     CURL *curl;
     CURLcode res;
     FILE *file;
@@ -142,6 +144,8 @@ int upload_file_to_folder(const char *folder_name, const char *filename, OAuthTo
 
 int download_file_from_folder(const char *folder_name, const char *filename, OAuthTokens *tokens)
 {
+    printf("cloud_storage: Downloading file %s from folder %s\n", filename, folder_name);
+
     CURL *curl;
     CURLcode res;
     FILE *file;

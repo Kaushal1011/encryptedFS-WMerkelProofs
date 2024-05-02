@@ -1,4 +1,4 @@
-// Remove the incompatible language mode flag
+// File: crypto.c
 #include "crypto.h"
 #include <string.h>
 unsigned char key[crypto_aead_aes256gcm_KEYBYTES];

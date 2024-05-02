@@ -5,7 +5,7 @@
 #define BLOCK_SIZE 4096 // 4KB block size
 #define INODE_SIZE sizeof(inode)
 #define INODES_PER_VOLUME 4      // maximum inodes that can be stored in a volume, minimum is 3
-#define DATA_BLOCKS_PER_VOLUME 3 // minimum is 2
+#define DATA_BLOCKS_PER_VOLUME 3 // minimum is 3 (because of min max leaf setting )
 #define MAX_CHILDREN 1024        // maximum children a directory can have
 #define MAX_PATH_LENGTH 256      // maximum length of a path
 #define MAX_NAME_LENGTH 256      // maximum length of a name

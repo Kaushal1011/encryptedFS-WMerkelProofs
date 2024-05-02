@@ -1,3 +1,4 @@
+// File: merkle.c
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -50,9 +51,9 @@ bool compare_hashes(const char *hash1, const char *hash2)
 
 void update_merkle_node(MerkleNode *node, const char *new_hash)
 {
-    printf("Updating merkle node\n");
+    printf("merkle: Updating merkle node\n");
     memcpy(node->hash, new_hash, 65);
-    printf("updated Node hash: %s\n", node->hash);
+    printf("merkle: updated Node hash: %s\n", node->hash);
     // Update the parent nodes
     while (node->parent)
     {
@@ -74,7 +75,7 @@ void update_merkle_node(MerkleNode *node, const char *new_hash)
 
 MerkleTree *build_merkle_tree(char **block_hashes, int num_blocks)
 {
-    printf("Building merkle tree\n");
+    printf("merkle: Building merkle tree\n");
 
     if (num_blocks == 0)
     {
@@ -135,7 +136,7 @@ MerkleTree *build_merkle_tree(char **block_hashes, int num_blocks)
 
 bool verify_merkle_path(MerkleNode *leaf_node, const char *expected_root_hash, char decrypted_hash[65])
 {
-    printf("Verifying merkle path\n");
+    printf("merkle: Verifying merkle path\n");
 
     MerkleNode *current = leaf_node;
     char current_hash[65] = {0};
@@ -164,8 +165,18 @@ bool verify_merkle_path(MerkleNode *leaf_node, const char *expected_root_hash, c
         current = current->parent;
     }
 
-    printf("Computed root hash: %s\n", current_hash);
-    printf("Expected root hash: %s\n", expected_root_hash);
+    printf("merkle: Computed root hash: %s\n", current_hash);
+    printf("merkle: Expected root hash: %s\n", expected_root_hash);
+
+    if (compare_hashes(current_hash, expected_root_hash))
+    {
+        printf("merkle: Root hash matches -> Verified\n");
+        return true;
+    }
+    else
+    {
+        printf("merkle: Root hash does not match -> Not Verified\n");
+    }
 
     return compare_hashes(current_hash, expected_root_hash);
 }
@@ -178,12 +189,12 @@ int get_number_of_blocks(char *volume_path)
 // this function will have to decrypt the block and then compute the hash
 void get_block_hash(int block_index, char *hash)
 {
-    printf("Getting block hash\n");
+    printf("merkle: Getting block hash\n");
 
     char block_data[BLOCK_SIZE];
     read_volume_block_no_check(block_index, block_data);
     compute_hash(block_data, hash);
-    printf("Block Hash: %s\n", hash);
+    printf("merkle: Block Hash: %s\n", hash);
 }
 
 void generate_random_hash(char *hash, size_t size)
@@ -191,13 +202,13 @@ void generate_random_hash(char *hash, size_t size)
     const char hex_chars[] = "0123456789abcdef";
     for (size_t i = 0; i < size; i++)
     {
-        hash[i] = hex_chars[rand() % 16];
+        hash[i] = hex_chars[rand() % 15];
     }
 }
 
 MerkleTree *initialize_merkle_tree_for_volume(char *volume_path)
 {
-    printf("Initializing merkle tree\n");
+    printf("merkle: Initializing merkle tree\n");
 
     int num_blocks = get_number_of_blocks(volume_path);
     char **block_hashes = malloc(num_blocks * sizeof(char *));
@@ -205,6 +216,7 @@ MerkleTree *initialize_merkle_tree_for_volume(char *volume_path)
     {
         block_hashes[i] = malloc(65);              // Assuming SHA-256 hash size
         generate_random_hash(block_hashes[i], 65); // Fill with random data
+        block_hashes[i][65] = '\0';                // Null-terminate the string
     }
 
     MerkleTree *tree = build_merkle_tree(block_hashes, num_blocks);
@@ -254,9 +266,9 @@ void save_node(MerkleNode *node, FILE *file)
 
 void save_merkle_tree_to_file(MerkleTree *tree, const char *file_path)
 {
-    printf("Saving merkle tree to file\n");
+    printf("merkle: Saving merkle tree to file\n");
 
-    printf("File path: %s\n", file_path);
+    printf("merkle: File path: %s\n", file_path);
 
     FILE *file = fopen(file_path, "wb");
     if (!file)
@@ -288,40 +300,46 @@ MerkleNode *load_node(FILE *file)
     }
 
     MerkleNode *node = create_merkle_node(hash, NULL, NULL, block_index);
-    if (!fgets(line, sizeof(line), file) || strcmp(line, "null\n") == 0)
-    {
-        return node; // No children
-    }
 
     // Load left child if present
-    if (strcmp(line, "left\n") == 0)
+    if (fgets(line, sizeof(line), file) && strcmp(line, "left\n") == 0)
     {
         node->left = load_node(file);
         if (node->left)
         {
-            node->left->parent = node; // Set parent
-
-            // Update min and max indices
-            node->min_index = node->left->min_index;
-            node->max_index = node->left->max_index;
+            node->left->parent = node;
         }
     }
 
-    // Assuming right child is next if there's no marker it means file format error or end of file
-    if (!fgets(line, sizeof(line), file) || strcmp(line, "null\n") == 0)
-    {
-        return node; // No right child
-    }
-    if (strcmp(line, "right\n") == 0)
+    // Load right child if present
+    if (fgets(line, sizeof(line), file) && strcmp(line, "right\n") == 0)
     {
         node->right = load_node(file);
         if (node->right)
         {
-            node->right->parent = node; // Set parent
-            // Update min and max indices
-            node->min_index = node->left->min_index;
-            node->max_index = node->right->max_index;
+            node->right->parent = node;
         }
+    }
+
+    // Update min and max indices
+    if (node->left && node->right)
+    {
+        node->min_index = node->left->min_index;
+        node->max_index = node->right->max_index;
+    }
+    else if (node->left)
+    {
+        node->min_index = node->left->min_index;
+        node->max_index = node->left->max_index;
+    }
+    else if (node->right)
+    {
+        node->min_index = node->right->min_index;
+        node->max_index = node->right->max_index;
+    }
+    else
+    {
+        node->min_index = node->max_index = block_index;
     }
 
     return node;
@@ -329,7 +347,7 @@ MerkleNode *load_node(FILE *file)
 
 MerkleTree *load_merkle_tree_from_file(const char *file_path)
 {
-    printf("Loading merkle tree from file\n");
+    printf("merkle: Loading merkle tree from file\n");
     FILE *file = fopen(file_path, "rb");
     if (!file)
     {
@@ -353,22 +371,22 @@ MerkleTree *load_merkle_tree_from_file(const char *file_path)
 
 MerkleTree *get_merkle_tree_for_volume(char *volume_id)
 {
-    printf("Getting merkle tree for volume %s\n", volume_id);
+    printf("merkle: Getting merkle tree for volume %s\n", volume_id);
     extern superblock_t sb;
-    printf("Volume tree: %p\n", sb.volumes[atoi(volume_id)].merkle_tree);
+    printf("merkle: Volume tree: %p\n", sb.volumes[atoi(volume_id)].merkle_tree);
     // volume id is the index of the volume in the superblock
     return sb.volumes[atoi(volume_id)].merkle_tree;
 }
 
 MerkleNode *find_leaf_node(MerkleNode *node, int block_index)
 {
-    printf("Finding leaf node\n");
+    printf("merkle: Finding leaf node\n");
 
-    printf("Node: %p\n", node);
+    printf("merkle: Node: %p\n", node);
 
-    printf("Block index: %d\n", block_index);
+    printf("merkle: Block index: %d\n", block_index);
 
-    printf("Node block index: %d %d %d \n", node->block_index, node->min_index, node->max_index);
+    printf("merkle: Node block index: %d %d %d \n", node->block_index, node->min_index, node->max_index);
 
     if (!node || (block_index < node->min_index || block_index > node->max_index))
     {
@@ -379,7 +397,7 @@ MerkleNode *find_leaf_node(MerkleNode *node, int block_index)
     // Direct hit for leaf nodes
     if (node->block_index == block_index)
     {
-        printf("Returning node\n");
+        printf("merkle: Returning node\n");
         return node;
     }
 
@@ -387,17 +405,17 @@ MerkleNode *find_leaf_node(MerkleNode *node, int block_index)
     MerkleNode *result = find_leaf_node(node->left, block_index);
     if (result == NULL)
     {
-        printf("Searching right\n");
+        printf("merkle: Searching right\n");
         result = find_leaf_node(node->right, block_index);
     }
-    printf("Returning result\n");
+    printf("merkle: Returning result\n");
     return result;
 }
 
 // Wrapper function to start the search from the tree root
 MerkleNode *find_leaf_node_in_tree(MerkleTree *tree, int block_index)
 {
-    printf("Finding leaf node in tree\n");
+    printf("merkle: Finding leaf node in tree\n");
 
     if (!tree)
     {
@@ -407,7 +425,7 @@ MerkleNode *find_leaf_node_in_tree(MerkleTree *tree, int block_index)
     MerkleNode *leaf = find_leaf_node(tree->root, block_index);
     if (leaf)
     {
-        printf("Leaf node found: %s\n", leaf->hash);
+        printf("merkle: Leaf node found: %s\n", leaf->hash);
         return leaf;
     }
     return NULL;
@@ -416,25 +434,33 @@ MerkleNode *find_leaf_node_in_tree(MerkleTree *tree, int block_index)
 void update_merkle_node_for_block(char *volume_id, int block_index, const void *block_data)
 {
     extern superblock_t sb;
-    printf("Updating merkle node for block\n");
+    printf("merkle: Updating merkle node for block\n");
 
     MerkleTree *tree = get_merkle_tree_for_volume(volume_id);
     MerkleNode *leaf_node = find_leaf_node_in_tree(tree, block_index);
 
-    printf("Leaf node found: %s\n", leaf_node->hash);
-    printf("Lead node block index %d\n", leaf_node->block_index);
+    printf("merkle: Leaf node found: %s\n", leaf_node->hash);
+    printf("merkle: Lead node block index %d\n", leaf_node->block_index);
 
     if (leaf_node)
     {
         char new_hash[65];
         compute_hash(block_data, new_hash);
-        printf("New hash: %s\n", new_hash);
+        printf("merkle: New hash: %s\n", new_hash);
         update_merkle_node(leaf_node, new_hash);
-        int res = compare_hashes(leaf_node->hash, new_hash);
-        printf("Hash comparison result: %d\n", res);
+        bool res = compare_hashes(leaf_node->hash, new_hash);
+        printf("merkle: Hash comparison result: %d\n", res);
+        if (res)
+        {
+            printf("merkle: Hashes match (stored and computed for leaf)\n");
+        }
+        else
+        {
+            printf("merkle: Hashes do not match (stored and computed for leaf)\n");
+        }
     }
 
-    printf("Saving merkle tree to file\n");
+    printf("merkle: Saving merkle tree to file\n");
     // save the updated tree to file
     save_merkle_tree_to_file(tree, sb.volumes[atoi(volume_id)].merkle_path);
 }
@@ -461,23 +487,23 @@ bool verify_block_integrity(int block_index)
 
     int block_index_in_volume = block_index % DATA_BLOCKS_PER_VOLUME;
 
-    printf("Verifying block integrity\n");
+    printf("merkle: Verifying block integrity\n");
     MerkleTree *tree = get_merkle_tree_for_volume(volume_id);
     MerkleNode *leaf_node = find_leaf_node_in_tree(tree, block_index_in_volume);
-    printf("Leaf node found: %s\n", leaf_node->hash);
-    printf("Leaf node block index %d\n", leaf_node->block_index);
+    printf("merkle: Leaf node found: %s\n", leaf_node->hash);
+    printf("merkle: Leaf node block index %d\n", leaf_node->block_index);
     char expected_root_hash[65];
     get_root_hash(volume_id, expected_root_hash);
 
-    printf("Expected root hash: %s\n", expected_root_hash);
+    printf("merkle: Expected root hash: %s\n", expected_root_hash);
 
     // read the hash from the block
     char decrypted_hash[65];
 
     get_block_hash(block_index, decrypted_hash);
 
-    printf("Decrypted hash: %s\n", decrypted_hash);
-    printf("Leaf node: %s\n", leaf_node->hash);
+    printf("merkle: Decrypted hash: %s\n", decrypted_hash);
+    printf("merkle: Leaf node: %s\n", leaf_node->hash);
 
     if (leaf_node)
     {

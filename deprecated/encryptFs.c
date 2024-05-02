@@ -1,3 +1,8 @@
+//  starting point for the implementation of the encrypting file system
+// contains the basic structure of the file system and the basic functions
+//  doesnt contain the encryption and decryption functions
+//  doesnt contain the cloud implementation
+// doesnt contain merkle tree implementation
 #define FUSE_USE_VERSION 30
 
 #include <libgen.h>

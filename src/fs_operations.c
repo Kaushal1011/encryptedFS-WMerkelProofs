@@ -1,3 +1,4 @@
+// File: fs_operations.c
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -28,9 +29,9 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
 
     while (inode_index == -1)
     {
-        printf("Expanding volume SEarCH\n");
+        printf("fs_op: dynamic_alloc: Expanding volume search\n");
 
-        printf("volume_num: %d\n", volume_num);
+        printf("fs_op: dynamic_alloc: volume_num: %d\n", volume_num);
 
         if (volume_num == NUMVOLUMES - 1)
         {
@@ -42,8 +43,8 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
             sprintf(volume_id_new, "%d", volume_num);
             read_bitmap(volume_id_new, &bmp_new);
             inode_index = funcPoint(&bmp_new, volume_id_new);
-            printf("inode_index: %d\n", inode_index);
-            printf("volume_id_new: %s\n", volume_id_new);
+            printf("fs_op: dynamic_alloc: inode_index: %d\n", inode_index);
+            printf("fs_op: dynamic_alloc: volume_id_new: %s\n", volume_id_new);
             if (inode_index != -1)
             {
                 strcpy(volume_id, volume_id_new);
@@ -55,9 +56,9 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
         {
             // Init new volume if not init
             sb->volume_count = sb->volume_count + 1;
-            printf("volume_num: %d\n", volume_num);
-            printf("sb->volume_count: %d\n", sb->volume_count);
-            printf("created new volume file");
+            printf("fs_op: dynamic_alloc: volume_num: %d\n", volume_num);
+            printf("fs_op: dynamic_alloc: sb->volume_count: %d\n", sb->volume_count);
+            printf("fs_op: dynamic_alloc: created new volume file");
             create_volume_files_local(volume_num, sb);
             sprintf(volume_id_new, "%d", volume_num);
             bitmap_t bmp_new;
@@ -67,7 +68,7 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
             set_bit(bmp_new.datablock_bmp, 0); // never used for expansion safety
             write_bitmap(volume_id_new, &bmp_new);
             inode_index = funcPoint(&bmp_new, volume_id_new);
-            printf("inode_index: %d\n", inode_index);
+            printf("fs_op: dynamic_alloc: inode_index: %d\n", inode_index);
             //  store superblock
             extern char superblock_path[MAX_PATH_LENGTH];
             FILE *file = fopen(superblock_path, "wb+");
@@ -90,7 +91,7 @@ int manage_volume_allocation(superblock_t *sb, char *volume_id, void *bmp, alloc
 // Define the file system operations here, same as the ones previously in your main file
 int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    printf("in create\n");
+    printf("fs_op: in create\n");
 
     (void)fi; // The fuse_file_info is not used in this simple example
 
@@ -105,14 +106,14 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     inode_index = inode_index + INODES_PER_VOLUME * atoi(volume_id);
 
-    printf("inode_index after volume adjust: %d\n", inode_index);
+    printf("fs_op: inode_index after volume adjust: %d\n", inode_index);
 
     if (inode_index == -1)
     {
         return -ENOSPC; // No space left for new inode
     }
 
-    printf("inode_index: %d\n", inode_index);
+    // printf("fs_op: inode_index: %d\n", inode_index);
 
     // Initialize the new inode
     inode new_inode;
@@ -139,7 +140,7 @@ int fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-    printf("read\n");
+    printf("fs_op: read\n");
 
     (void)fi;
 
@@ -191,7 +192,7 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
 
 int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
-    printf("write\n");
+    printf("fs_op: write\n");
 
     (void)fi;
 
@@ -228,8 +229,8 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
             // Allocate a new block, if volume_id is not enough for new block, allocate new volume
             int new_block_index = manage_volume_allocation(&sb, volume_id_datablocks, &bmp, allocate_data_block);
 
-            printf("new_block_index: %d\n", new_block_index);
-            printf("volume_id_datablocks: %s\n", volume_id_datablocks);
+            printf("fs_op: write: new_block_index: %d\n", new_block_index);
+            printf("fs_op: write: volume_id_datablocks: %s\n", volume_id_datablocks);
 
             allocate_new_block = 1;
 
@@ -262,7 +263,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     {
         file_inode.size = offset + size;
     }
-    printf("file_inode.size: %ld\n", file_inode.size);
+    printf("fs_op: write: file_inode.size: %ld\n", file_inode.size);
     write_inode(inode_index, &file_inode);
 
     return bytes_written;
@@ -271,7 +272,7 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
 // okay checking volumes here and adding logic might be tough
 int fs_truncate(const char *path, off_t newsize)
 {
-    printf("truncate\n");
+    printf("fs_op: truncate\n");
 
     char volume_id[9] = "0";
     int inode_index = find_inode_index_by_path(path);
@@ -339,9 +340,9 @@ int fs_truncate(const char *path, off_t newsize)
 
 int fs_getattr(const char *path, struct stat *stbuf)
 {
-    printf("getattr\n");
+    printf("fs_op: getattr\n");
 
-    printf("path: %s\n", path);
+    printf("fs_op: path: %s\n", path);
 
     memset(stbuf, 0, sizeof(struct stat)); // Clear the stat buffer
 
@@ -372,7 +373,7 @@ int fs_getattr(const char *path, struct stat *stbuf)
 
 int fs_open(const char *path, struct fuse_file_info *fi)
 {
-    printf("open\n");
+    printf("fs_op: open\n");
 
     int inode_index = find_inode_index_by_path(path);
     // handle checking for file
@@ -391,7 +392,7 @@ int fs_open(const char *path, struct fuse_file_info *fi)
 
 int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
-    printf("readdir\n");
+    printf("fs_op: readdir\n");
 
     (void)offset; // Not used in this function
     (void)fi;     // Not used in this function
@@ -450,7 +451,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 
 int fs_rename(const char *from, const char *to)
 {
-    printf("rename\n");
+    printf("fs_op: rename\n");
 
     // Find inode index for the source path
     int from_inode_index = find_inode_index_by_path(from);
@@ -486,7 +487,7 @@ int fs_unlink(const char *path)
 {
     // handle mutli volume setup
     // also clear data blocks for the deleted inode in volume handled setup
-    printf("unlink\n");
+    printf("fs_op: unlink\n");
 
     char volume_id[9] = "0";
 
@@ -527,7 +528,7 @@ int fs_unlink(const char *path)
 
 void fs_destroy()
 {
-    printf("destroy\n");
+    printf("fs_op: destroy\n");
     extern superblock_t sb;
 
     extern char superblock_path[MAX_PATH_LENGTH];
@@ -536,7 +537,7 @@ void fs_destroy()
 
     if (sb.vtype == GDRIVE)
     {
-        printf("uploading to remote\n");
+        printf("fs_op: destroy: uploading to remote\n");
 
         char foldername[MAX_PATH_LENGTH];
         strcpy(foldername, remote_superblock_path);
