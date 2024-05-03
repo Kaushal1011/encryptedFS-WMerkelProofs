@@ -1,5 +1,11 @@
 # EncryptFS: Encrypted Integrity-Preserving Filesystem
 
+## Submission
+
+- [Run instructions and README.md](./README.md)
+- [Report](./Report.pdf)
+- [Demo Documentation](./Demo.pdf)
+
 ## Authors
 - Kaushal Patil (653639939)
 - Vasu Garg (676073104)
